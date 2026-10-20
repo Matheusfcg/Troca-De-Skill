@@ -227,6 +227,7 @@ function normalize(s) {
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .toLowerCase()
+        .replace(/\s+/g, ' ')
         .trim();
 }
 // O mesmo nome de campanha pode aparecer em mais de uma aba do arquivo,
