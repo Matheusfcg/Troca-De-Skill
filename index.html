@@ -790,11 +790,11 @@ function SkillSwapTool() {
     }
     const solicitarValidacao = async () => {
         if (!canGenerate || !numero.trim()) return;
-        if (!/^https:\/\//.test(VALIDATION_URL)) {
-            setValState('error');
-            setValMsg('A URL da validação ainda não foi configurada na ferramenta (VALIDATION_URL).');
-            return;
-        }
+       if (!VALIDATION_URL) {
+    setValState('error');
+    setValMsg('A URL da validação ainda não foi configurada.');
+    return;
+}
         setValMsg('');
         setValState('sending');
         valStart.current = Date.now();
