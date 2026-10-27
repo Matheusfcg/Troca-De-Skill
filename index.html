@@ -817,6 +817,7 @@ function SkillSwapTool() {
             const j = await resp.json();
             if (!j || !j.id) throw new Error((j && j.erro) || 'resposta sem id');
             setValId(j.id);
+            if (j.teamsErro) setValMsg('Atenção: o pedido foi registrado, mas o aviso no Teams falhou (' + j.teamsErro + '). Envie este link ao grupo: ' + j.link);
             valStart.current = Date.now();
             setValState('pending');
         } catch (err) {
@@ -880,7 +881,9 @@ function SkillSwapTool() {
             : 'Solicitar validação';
         let status = null;
         if (valState === 'pending')
-            status = E("p", { className: "text-xs mt-2", style: { color: '#6B6B6B' } }, 'Pedido enviado ao grupo do Teams. Esta tela libera sozinha quando alguém aprovar.');
+            status = E("div", null,
+                E("p", { className: "text-xs mt-2", style: { color: '#6B6B6B' } }, 'Pedido enviado ao grupo do Teams. Esta tela libera sozinha quando alguém aprovar.'),
+                valMsg && E("p", { className: "text-xs mt-1 break-all", style: { color: '#B36B00' } }, valMsg));
         else if (valState === 'approved')
             status = E("p", { className: "text-xs mt-2 font-medium", style: { color: BRAND.successText } }, '\u2713 Validado por ' + (valWho || '—') + '. Download liberado no passo 4.');
         else if (valState === 'rejected')
