@@ -707,6 +707,7 @@ function SkillSwapTool() {
     const [valId, setValId] = useState('');
     const [valWho, setValWho] = useState('');
     const [valMsg, setValMsg] = useState('');
+    const [valMotivo, setValMotivo] = useState('');
     const [popup, setPopup] = useState(null);
     const valStart = useRef(0);
     // bloco "Cole os logins aqui" (passo 2): arquivo carregado, aviso e arrastar
@@ -728,7 +729,7 @@ function SkillSwapTool() {
         // qualquer mudança nos logins ou na campanha invalida a aprovação anterior
         setValState('idle');
         setValId('');
-        setValWho('');
+        setValWho('');setValMotivo('');
         setValMsg('');
     }, [campaign, loginsRaw]);
     // campanhas cujo NOME (não a chave aba+nome) bate exatamente com o que
@@ -1014,7 +1015,7 @@ function SkillSwapTool() {
     const novaSolicitacao = () => {
         setValState('idle');
         setValId('');
-        setValWho('');
+        setValWho('');setValMotivo('');
         setValMsg('');
     };
     const verificarDeNovo = () => {
@@ -1039,7 +1040,8 @@ function SkillSwapTool() {
                 if (j.status === 'REPROVADO') {
                     setValWho(j.validador || '');
                     setValState('rejected');
-                    setPopup({ tipo: 'rejected', nome: j.validador || '' });
+                    setValMotivo(j.motivo || '');
+                    setPopup({ tipo: 'rejected', nome: j.validador || '', motivo: j.motivo || '' });
                     return;
                 }
                 if (j.status === 'NAO_ENCONTRADO') {
@@ -1073,7 +1075,7 @@ function SkillSwapTool() {
         else if (valState === 'approved')
             status = E("p", { className: "text-xs mt-2 font-medium", style: { color: BRAND.successText } }, '\u2713 Validado por ' + (valWho || '—') + '. Download liberado no passo 4.');
         else if (valState === 'rejected')
-            status = E("p", { className: "text-xs mt-2", style: { color: BRAND.errorText } }, 'Reprovado por ' + (valWho || '—') + '. Ajuste a solicitação e peça uma nova validação. ',
+            status = E("p", { className: "text-xs mt-2", style: { color: BRAND.errorText } }, 'Reprovado por ' + (valWho || '—') + (valMotivo ? ' — motivo: ' + valMotivo : '') + '. Ajuste a solicitação e peça uma nova validação. ',
                 E("button", { onClick: novaSolicitacao, className: "underline" }, 'novo pedido'));
         else if (valState === 'timeout')
             status = E("p", { className: "text-xs mt-2", style: { color: '#B36B00' } }, 'Ainda sem decisão. O pedido continua pendente no Teams. ',
@@ -1098,6 +1100,7 @@ function SkillSwapTool() {
                 E("div", { className: "ct-modal-ico", style: { backgroundColor: ok ? BRAND.successBg : BRAND.errorBg, color: ok ? BRAND.success : BRAND.errorText } }, ok ? '\u2713' : '\u2715'),
                 E("p", { className: "text-base font-bold mt-3", style: { color: BRAND.dark } }, ok ? 'Solicitação validada' : 'Solicitação reprovada'),
                 E("p", { className: "text-sm mt-1", style: { color: '#6B6B6B' } }, (ok ? 'Validado por ' : 'Reprovado por ') + (popup.nome || '—') + (ok ? '. O download do template foi liberado.' : (VALIDATION_REQUIRED ? '. O download continua bloqueado.' : '. Ajuste a solicitação antes de usar o template.'))),
+                (!ok && popup.motivo) ? E("div", { className: "text-sm mt-3 text-left rounded-lg p-3", style: { backgroundColor: BRAND.errorBg, border: '1px solid ' + BRAND.errorBorder, color: BRAND.errorText, whiteSpace: 'pre-wrap', wordBreak: 'break-word' } }, E("p", { className: "text-xs font-semibold uppercase tracking-wide mb-1" }, 'Onde errou'), popup.motivo) : null,
                 E("button", { onClick: () => setPopup(null), className: "ct-btn-primary text-white px-5 py-2 rounded-lg text-sm font-semibold mt-4" }, 'OK')));
     }
     const handleDownload = () => {
