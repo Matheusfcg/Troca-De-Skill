@@ -87,6 +87,17 @@ function Search(props) {
         React.createElement("circle", { cx: "11", cy: "11", r: "8" }),
         React.createElement("line", { x1: "21", y1: "21", x2: "16.65", y2: "16.65" })));
 }
+function FileText(props) {
+    return (React.createElement(Icon, { ...props },
+        React.createElement("path", { d: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" }),
+        React.createElement("polyline", { points: "14 2 14 8 20 8" }),
+        React.createElement("line", { x1: "16", y1: "13", x2: "8", y2: "13" }),
+        React.createElement("line", { x1: "16", y1: "17", x2: "8", y2: "17" })));
+}
+function Paperclip(props) {
+    return (React.createElement(Icon, { ...props },
+        React.createElement("path", { d: "m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" })));
+}
 const BRAND = {
     red: '#E60000',
     redDark: '#C20000',
@@ -110,7 +121,7 @@ const BRAND = {
 const BUILD_VERSION = 'build 29';
 // Validação em grupo do Teams (Google Apps Script). Cole aqui a URL do Web App
 // que termina em /exec (NÃO a que termina em /dev, essa só abre pra quem edita).
-const VALIDATION_URL = 'https://script.google.com/macros/s/AKfycbwcpFJCM03-llBuSBWjg_lrw3aKmUmiHjNQL8AMXhuKJEhpizo0BfhCvU5Ttr6lQADK/exec';
+const VALIDATION_URL = 'https://script.google.com/macros/s/AKfycbyCFsBtQhe7Us_rARIKXya5bTrbMuc4V-qnHBTuSKxMgZgGcUBc0Zs0MugLhCwHJzjI/exec';
 // tempo máximo esperando a decisão antes de pedir pra verificar de novo
 const VALIDATION_TIMEOUT_MS = 30 * 60 * 1000;
 // de quanto em quanto tempo a ferramenta pergunta se já decidiram
@@ -740,6 +751,50 @@ function readImageFile(file) {
   });
 }
 
+// Arquivos aceitos no card "Aprovação": imagem (reduzida a JPEG) ou documento de até 3 MB.
+const APPROVAL_MAX_FILES = 6;
+const APPROVAL_MAX_DOC_BYTES = 3 * 1024 * 1024;
+const APPROVAL_MAX_TOTAL_BYTES = 8 * 1024 * 1024;
+const APPROVAL_EXT = ['pdf', 'eml', 'msg', 'txt', 'csv', 'doc', 'docx', 'xls', 'xlsx'];
+const APPROVAL_ACCEPT = 'image/*,.pdf,.eml,.msg,.txt,.csv,.doc,.docx,.xls,.xlsx';
+function getFilesFromClipboard(cd) {
+  if (!cd) return [];
+  const out = [];
+  const items = cd.items ? Array.from(cd.items) : [];
+  for (const it of items) {
+    if (it.kind === 'file') {
+      const f = it.getAsFile();
+      if (f) out.push(f);
+    }
+  }
+  if (out.length === 0 && cd.files && cd.files.length > 0) return Array.from(cd.files);
+  return out;
+}
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Não consegui ler "' + (file.name || 'arquivo') + '".'));
+    reader.onload = () => resolve(reader.result);
+    reader.readAsDataURL(file);
+  });
+}
+async function readApprovalFile(file) {
+  if (/^image\//.test(file.type || '')) {
+    const r = await readImageFile(file);
+    return { kind: 'img', dataUrl: r.dataUrl, w: r.w, h: r.h, kb: r.kb, bytes: Math.round(r.dataUrl.length * 0.75) };
+  }
+  const m = /\.([A-Za-z0-9]+)$/.exec(file.name || '');
+  const ext = m ? m[1].toLowerCase() : '';
+  if (APPROVAL_EXT.indexOf(ext) < 0) {
+    throw new Error('"' + (file.name || 'arquivo') + '": tipo não aceito. Use imagem, PDF, e-mail (.eml/.msg), Word, Excel ou texto.');
+  }
+  if (file.size > APPROVAL_MAX_DOC_BYTES) {
+    throw new Error('"' + file.name + '" passa de ' + Math.round(APPROVAL_MAX_DOC_BYTES / 1048576) + ' MB.');
+  }
+  const dataUrl = await readFileAsDataUrl(file);
+  return { kind: 'file', dataUrl, w: 0, h: 0, kb: Math.max(1, Math.round(file.size / 1024)), bytes: file.size };
+}
+
 function SkillSwapTool() {
     const [matrix, setMatrix] = useState(null);
     const [campaignOrder, setCampaignOrder] = useState([]);
@@ -765,8 +820,12 @@ function SkillSwapTool() {
     const valStart = useRef(0);
     // nome do analista que está fazendo a solicitação
     const [solicitante, setSolicitante] = useState('');
-    // card "Aprovação": print colado/enviado (opcional)
-    const [approvalImg, setApprovalImg] = useState(null);
+    // card "Aprovação": prints e arquivos da aprovação (opcional, um ou mais)
+    const [approvalFiles, setApprovalFiles] = useState([]);
+    const approvalFilesRef = useRef([]);
+    approvalFilesRef.current = approvalFiles;
+    // texto do bloco "Comentário"
+    const [comment, setComment] = useState('');
     const [approvalMsg, setApprovalMsg] = useState('');
     const [approvalDrag, setApprovalDrag] = useState(false);
     const approvalInput = useRef(null);
@@ -791,7 +850,7 @@ function SkillSwapTool() {
         setValId('');
         setValWho('');setValMotivo('');
         setValMsg('');
-    }, [campaign, loginsRaw, solicitante, approvalImg]);
+    }, [campaign, loginsRaw, solicitante, approvalFiles, comment]);
     // campanhas cujo NOME (não a chave aba+nome) bate exatamente com o que
     // está digitado — mais de uma aqui significa "esse nome existe em mais
     // de uma aba", o caso que motivou essa correção toda
@@ -933,8 +992,9 @@ function SkillSwapTool() {
     };
     const handleLoginsPaste = (e) => {
         const cd = e.clipboardData;
-        // colou uma IMAGEM (print): vai para o card da aprovação, não para os logins
-        const pastedImg = getImageFromClipboard(cd);
+        // colou uma IMAGEM (print): vai para o bloco de comentário, não para os logins
+        // (se também veio texto, como numa cópia do Excel, segue o fluxo normal dos logins)
+        const pastedImg = cd && !cd.getData('text') ? getImageFromClipboard(cd) : null;
         if (pastedImg) {
             e.preventDefault();
             handleApprovalFile(pastedImg);
@@ -969,26 +1029,55 @@ function SkillSwapTool() {
             handleLoginsFile(files[0]);
         }
     };
-    const handleApprovalFile = async (file) => {
-        if (!file) return;
+    const handleApprovalFiles = async (fileList) => {
+        const list = Array.from(fileList || []).filter(Boolean);
+        if (list.length === 0) return;
         setApprovalMsg('');
-        try {
-            const res = await readImageFile(file);
-            setApprovalImg({ name: file.name && file.name !== 'image.png' ? file.name : 'print colado', dataUrl: res.dataUrl, w: res.w, h: res.h, kb: res.kb });
-        } catch (err) {
-            setApprovalMsg((err && err.message) || 'Não consegui ler a imagem.');
+        const errs = [];
+        const read = [];
+        for (const file of list) {
+            try {
+                const r = await readApprovalFile(file);
+                read.push({ file, r });
+            } catch (err) {
+                errs.push((err && err.message) || ('Não consegui ler "' + (file && file.name) + '".'));
+            }
         }
+        const out = approvalFilesRef.current.slice();
+        let total = out.reduce((sum, f) => sum + f.bytes, 0);
+        let pasted = out.filter((f) => /^print colado/.test(f.name)).length;
+        for (const { file, r } of read) {
+            if (out.length >= APPROVAL_MAX_FILES) {
+                errs.push('Limite de ' + APPROVAL_MAX_FILES + ' arquivos por pedido.');
+                break;
+            }
+            if (total + r.bytes > APPROVAL_MAX_TOTAL_BYTES) {
+                errs.push('"' + (file.name || 'print') + '" não coube: o total dos arquivos passa de ' + Math.round(APPROVAL_MAX_TOTAL_BYTES / 1048576) + ' MB.');
+                continue;
+            }
+            let name = file.name && file.name !== 'image.png' ? file.name : '';
+            if (!name) {
+                pasted += 1;
+                name = pasted === 1 ? 'print colado' : 'print colado ' + pasted;
+            }
+            out.push({ id: Date.now() + '-' + out.length + '-' + Math.round(Math.random() * 1000000), name, kind: r.kind, dataUrl: r.dataUrl, w: r.w, h: r.h, kb: r.kb, bytes: r.bytes });
+            total += r.bytes;
+        }
+        approvalFilesRef.current = out;
+        setApprovalFiles(out);
+        if (errs.length) setApprovalMsg(errs.join(' '));
     };
+    const handleApprovalFile = (file) => handleApprovalFiles([file]);
     useEffect(() => {
-        // Ctrl+V de um print em qualquer ponto da página (menos dentro de campos de texto)
+        // Ctrl+V de prints/arquivos em qualquer ponto da página (menos dentro de campos de texto)
         const onPaste = (e) => {
             const t = e.target;
             if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT')) return;
             if (!matrix) return;
-            const f = getImageFromClipboard(e.clipboardData);
-            if (f) {
+            const files = getFilesFromClipboard(e.clipboardData);
+            if (files.length > 0) {
                 e.preventDefault();
-                handleApprovalFile(f);
+                handleApprovalFiles(files);
             }
         };
         document.addEventListener('paste', onPaste);
@@ -1087,7 +1176,8 @@ function SkillSwapTool() {
                 skills: campaignSkills.map((s) => s.skill).join(', '),
                 det: buildDetalhes(),
                 solicitante: solicitante.trim(),
-                print: approvalImg ? approvalImg.dataUrl : '',
+                comentario: comment.trim(),
+                anexos: approvalFiles.map((f) => ({ name: f.kind === 'img' ? f.name.replace(/\.[^.\/\\]*$/, '') + '.jpg' : f.name, kind: f.kind, dataUrl: f.dataUrl })),
             };
             // text/plain evita o pré-voo de CORS, que o Apps Script não responde
             const resp = await fetch(VALIDATION_URL, {
@@ -1100,7 +1190,7 @@ function SkillSwapTool() {
             setValId(j.id);
             const avisos = [];
             if (j.teamsErro) avisos.push('o aviso no Teams falhou (' + j.teamsErro + '). Envie este link ao grupo: ' + j.link);
-            if (j.printErro) avisos.push('o print da aprovação não foi salvo (' + j.printErro + ')');
+            if (j.printErro) avisos.push('algum anexo do comentário não foi salvo (' + j.printErro + ')');
             if (avisos.length) setValMsg('Atenção: o pedido foi registrado, mas ' + avisos.join(' · '));
             valStart.current = Date.now();
             setValState('pending');
@@ -1217,7 +1307,8 @@ function SkillSwapTool() {
             .replace(/^_+|_+$/g, '')
             .slice(0, 60);
         a.href = url;
-        a.download = 'template_agentes_' + safeName + '.csv';
+        const idArq = String(numero || '').replace(/\D/g, '');
+        a.download = 'template_agentes_' + (idArq ? 'ID' + idArq + '_' : '') + safeName + '.csv';
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -1233,8 +1324,9 @@ function SkillSwapTool() {
         setCampaignQuery('');
         setLoginsRaw('');
         setError('');
-        setApprovalImg(null);
+        setApprovalFiles([]);
         setApprovalMsg('');
+        setComment('');
         if (fileInput.current)
             fileInput.current.value = '';
     };
@@ -1251,6 +1343,12 @@ function SkillSwapTool() {
         .ct-upload:hover { border-color: ${BRAND.red}; background-color: ${BRAND.errorBg}; }
         .ct-input { border: 1px solid ${BRAND.border}; transition: border-color .15s ease, box-shadow .15s ease; outline: none; }
         .ct-input:focus { border-color: ${BRAND.red}; box-shadow: 0 0 0 3px rgba(230,0,0,0.1); }
+        .ct-composer { border: 1px solid ${BRAND.border}; background: #fff; transition: border-color .15s ease, box-shadow .15s ease; }
+        .ct-composer:focus-within { border-color: ${BRAND.red}; box-shadow: 0 0 0 3px rgba(230,0,0,0.1); }
+        .ct-composer-drag { border-color: ${BRAND.red}; background-color: ${BRAND.errorBg}; }
+        .ct-composer-text { display: block; border: 0; outline: none; background: transparent; }
+        .ct-attach { color: #6B6B6B; }
+        .ct-attach:hover { color: ${BRAND.red}; }
         .ct-logins-wrap { position: relative; }
         .ct-logins { display: block; }
         .ct-logins-empty { border: 2px dashed ${BRAND.border}; background-color: #fff; transition: border-color .15s ease, background-color .15s ease; }
@@ -1378,50 +1476,83 @@ function SkillSwapTool() {
                                 " prof ",
                                 s.prof))))));
                         })))))))),
-                React.createElement("section", { className: 'ct-shadow bg-white rounded-lg p-5 transition-opacity ' + (!matrix ? 'opacity-40 pointer-events-none' : ''), style: { border: '1px solid ' + BRAND.border } },
-                    React.createElement(StepHeader, { n: 2, label: "Aprova\u00E7\u00E3o", done: Boolean(approvalImg) }),
-                    !approvalImg ? (React.createElement("label", {
-                        className: "ct-upload mt-4 flex flex-col items-center justify-center gap-2 rounded-lg py-8 cursor-pointer",
-                        style: approvalDrag ? { borderColor: BRAND.red, backgroundColor: BRAND.errorBg } : undefined,
-                        onDragOver: (e) => {
-                            if (e.dataTransfer && Array.from(e.dataTransfer.types || []).indexOf('Files') >= 0) {
-                                e.preventDefault();
-                                setApprovalDrag(true);
-                            }
-                        },
-                        onDragLeave: () => setApprovalDrag(false),
-                        onDrop: (e) => {
-                            setApprovalDrag(false);
-                            const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-                            if (f) {
-                                e.preventDefault();
-                                handleApprovalFile(f);
-                            }
-                        },
+                React.createElement("section", {
+                    className: 'ct-shadow bg-white rounded-lg p-5 transition-opacity ' + (!matrix ? 'opacity-40 pointer-events-none' : ''),
+                    style: { border: '1px solid ' + BRAND.border },
+                    onDragOver: (e) => {
+                        if (e.dataTransfer && Array.from(e.dataTransfer.types || []).indexOf('Files') >= 0) {
+                            e.preventDefault();
+                            setApprovalDrag(true);
+                        }
                     },
-                        React.createElement(Upload, { className: "w-5 h-5", style: { color: '#B3B3B3' }, strokeWidth: 1.75 }),
-                        React.createElement("span", { className: "text-sm", style: { color: BRAND.dark } }, "Se tiver aprova\u00E7\u00E3o, cole o print aqui (Ctrl+V)"),
-                        React.createElement("span", { className: "text-xs", style: { color: '#B3B3B3' } }, "ou clique para carregar a imagem"),
-                        React.createElement("input", { ref: approvalInput, type: "file", accept: "image/*", className: "hidden", onChange: (e) => {
-                            const f = e.target.files && e.target.files[0];
-                            if (f) handleApprovalFile(f);
-                            e.target.value = '';
-                        } }))) : (React.createElement("div", { className: "mt-4 flex items-center justify-between gap-3 rounded-lg p-4", style: { backgroundColor: BRAND.successBg, border: '1px solid ' + BRAND.successBorder } },
-                        React.createElement("div", { className: "flex items-center gap-3 min-w-0" },
-                            React.createElement(CheckCircle2, { className: "w-5 h-5 flex-shrink-0", style: { color: BRAND.success }, strokeWidth: 1.75 }),
-                            React.createElement("img", { src: approvalImg.dataUrl, alt: "Print da aprova\u00E7\u00E3o", className: "rounded flex-shrink-0", style: { height: '44px', width: 'auto', maxWidth: '110px', objectFit: 'cover', border: '1px solid ' + BRAND.successBorder } }),
-                            React.createElement("div", { className: "min-w-0" },
-                                React.createElement("p", { className: "text-sm font-medium truncate", style: { color: BRAND.successText } }, approvalImg.name),
-                                React.createElement("p", { className: "text-xs mt-0.5 font-mono", style: { color: '#2E8F6F' } }, approvalImg.w + '\u00D7' + approvalImg.h + ' \u00B7 ' + approvalImg.kb + ' KB'))),
-                        React.createElement("button", { onClick: () => { setApprovalImg(null); setApprovalMsg(''); }, className: "flex items-center gap-1 text-xs flex-shrink-0", style: { color: '#6B6B6B' } },
-                            React.createElement(RefreshCw, { className: "w-3.5 h-3.5", strokeWidth: 1.75 }),
-                            "trocar"))),
+                    onDragLeave: () => setApprovalDrag(false),
+                    onDrop: (e) => {
+                        setApprovalDrag(false);
+                        const fs = e.dataTransfer && e.dataTransfer.files;
+                        if (fs && fs.length > 0) {
+                            e.preventDefault();
+                            handleApprovalFiles(fs);
+                        }
+                    },
+                },
+                    React.createElement(StepHeader, { n: 2, label: "Coment\u00E1rio", done: approvalFiles.length > 0 || comment.trim() !== '' }),
+                    React.createElement("div", { className: 'ct-composer mt-4 rounded-lg' + (approvalDrag ? ' ct-composer-drag' : '') },
+                        approvalFiles.length > 0 && React.createElement("div", { className: "flex flex-wrap gap-2 p-3 pb-0" }, approvalFiles.map((f) => {
+                            const removeBtn = React.createElement("button", {
+                                type: "button",
+                                title: "remover",
+                                "aria-label": "remover " + f.name,
+                                onClick: () => setApprovalFiles((prev) => prev.filter((x) => x.id !== f.id)),
+                                className: "absolute flex items-center justify-center rounded-full text-white",
+                                style: { top: '-6px', right: '-6px', width: '18px', height: '18px', fontSize: '12px', lineHeight: '1', backgroundColor: '#555' },
+                            }, "\u00D7");
+                            if (f.kind === 'img') {
+                                return React.createElement("div", { key: f.id, className: "relative", title: f.name },
+                                    React.createElement("img", { src: f.dataUrl, alt: f.name, className: "rounded-lg block", style: { height: '56px', width: 'auto', maxWidth: '120px', objectFit: 'cover', border: '1px solid ' + BRAND.border } }),
+                                    removeBtn);
+                            }
+                            return React.createElement("div", { key: f.id, className: "relative flex items-center gap-2 rounded-lg px-2.5 text-xs", title: f.name, style: { height: '56px', backgroundColor: BRAND.gray50, border: '1px solid ' + BRAND.border, color: BRAND.dark } },
+                                React.createElement(FileText, { className: "w-4 h-4 flex-shrink-0", style: { color: '#8F8F8F' }, strokeWidth: 1.75 }),
+                                React.createElement("span", { className: "truncate", style: { maxWidth: '9rem' } }, f.name),
+                                React.createElement("span", { className: "font-mono flex-shrink-0", style: { color: '#9C9C9C' } }, f.kb + ' KB'),
+                                removeBtn);
+                        })),
+                        React.createElement("textarea", {
+                            value: comment,
+                            onChange: (e) => setComment(e.target.value),
+                            onPaste: (e) => {
+                                // print/arquivo colado vira anexo da mensagem; texto colado segue normal
+                                const cd = e.clipboardData;
+                                if (cd && !cd.getData('text')) {
+                                    const files = getFilesFromClipboard(cd);
+                                    if (files.length > 0) {
+                                        e.preventDefault();
+                                        handleApprovalFiles(files);
+                                    }
+                                }
+                            },
+                            rows: 3,
+                            maxLength: 1000,
+                            placeholder: "Escreva um coment\u00E1rio ou cole um print (Ctrl+V)...",
+                            'aria-label': 'Coment\u00E1rio',
+                            className: "ct-composer-text w-full text-sm p-3 resize-none",
+                            style: { color: BRAND.dark },
+                        }),
+                        React.createElement("div", { className: "flex items-center justify-between gap-2 px-3 pb-2" },
+                            approvalFiles.length < APPROVAL_MAX_FILES
+                                ? React.createElement("label", { className: "ct-attach inline-flex items-center gap-1.5 text-xs cursor-pointer", title: "Anexar print ou arquivo" },
+                                    React.createElement(Paperclip, { className: "w-4 h-4", strokeWidth: 1.75 }),
+                                    "Anexar",
+                                    React.createElement("input", { ref: approvalInput, type: "file", multiple: true, accept: APPROVAL_ACCEPT, className: "hidden", onChange: (e) => {
+                                        if (e.target.files && e.target.files.length > 0) handleApprovalFiles(e.target.files);
+                                        e.target.value = '';
+                                    } }))
+                                : React.createElement("span", { className: "text-[11px]", style: { color: '#B3B3B3' } }, "Limite de " + APPROVAL_MAX_FILES + " anexos"),
+                            React.createElement("span", { className: "text-[11px]", style: { color: '#B3B3B3' } }, "ou arraste arquivos para c\u00E1"))),
                     approvalMsg && (React.createElement("div", { className: "mt-3 flex items-start gap-2 rounded-lg p-3 text-sm", style: { backgroundColor: BRAND.errorBg, border: '1px solid ' + BRAND.errorBorder, color: BRAND.errorText } },
                         React.createElement(AlertTriangle, { className: "w-4 h-4 mt-0.5 flex-shrink-0", strokeWidth: 1.75 }),
                         React.createElement("span", null, approvalMsg))),
-                    React.createElement("p", { className: "text-xs mt-3", style: { color: '#6B6B6B' } },
-                        React.createElement("span", { className: "font-semibold" }, "Obs.: "),
-                        "se houver mais de duas aprova\u00E7\u00F5es, envie um print com a tela dividida.")),
+                    React.createElement("p", { className: "text-xs mt-3", style: { color: '#6B6B6B' } }, "Use este campo para colocar cards de retorno, prints de e-mails \u201Cde acordo\u201D etc.")),
                 React.createElement("section", { className: 'ct-shadow bg-white rounded-lg p-5 transition-opacity ' + (!matrix ? 'opacity-40 pointer-events-none' : ''), style: { border: '1px solid ' + BRAND.border } },
                     React.createElement(StepHeader, { n: 3, label: "Solicita\u00E7\u00E3o", done: canGenerate }),
                     React.createElement("div", { className: "mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 ct-step2-grid" },
