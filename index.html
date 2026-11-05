@@ -826,6 +826,8 @@ function SkillSwapTool() {
     approvalFilesRef.current = approvalFiles;
     // texto do bloco "Comentário"
     const [comment, setComment] = useState('');
+    // aviso mostrado no passo 5 depois que o template é baixado e a tela é reiniciada
+    const [lastDownload, setLastDownload] = useState('');
     const [approvalMsg, setApprovalMsg] = useState('');
     const [approvalDrag, setApprovalDrag] = useState(false);
     const approvalInput = useRef(null);
@@ -850,6 +852,10 @@ function SkillSwapTool() {
         setValId('');
         setValWho('');setValMotivo('');
         setValMsg('');
+    }, [campaign, loginsRaw, solicitante, approvalFiles, comment]);
+    useEffect(() => {
+        // começou uma nova solicitação: some o aviso do download anterior
+        if (campaign || loginsRaw || solicitante || approvalFiles.length > 0 || comment) setLastDownload('');
     }, [campaign, loginsRaw, solicitante, approvalFiles, comment]);
     // campanhas cujo NOME (não a chave aba+nome) bate exatamente com o que
     // está digitado — mais de uma aqui significa "esse nome existe em mais
@@ -1290,6 +1296,29 @@ function SkillSwapTool() {
                 (!ok && popup.motivo) ? E("div", { className: "text-sm mt-3 text-left rounded-lg p-3", style: { backgroundColor: BRAND.errorBg, border: '1px solid ' + BRAND.errorBorder, color: BRAND.errorText, whiteSpace: 'pre-wrap', wordBreak: 'break-word' } }, E("p", { className: "text-xs font-semibold uppercase tracking-wide mb-1" }, 'Onde errou'), popup.motivo) : null,
                 E("button", { onClick: () => setPopup(null), className: "ct-btn-primary text-white px-5 py-2 rounded-lg text-sm font-semibold mt-4" }, 'OK')));
     }
+    // "F5" do Comentário para baixo: limpa tudo menos a matriz carregada (passo 1)
+    const resetRequest = () => {
+        setComment('');
+        setApprovalFiles([]);
+        approvalFilesRef.current = [];
+        setApprovalMsg('');
+        setApprovalDrag(false);
+        setLoginsRaw('');
+        setLoginsFile(null);
+        setLoginsMsg('');
+        setSolicitante('');
+        setCampaignQuery('');
+        setCampaign('');
+        lastPicked.current = { query: '', key: '' };
+        setShowSuggestions(false);
+        setNumero('');
+        setValState('idle');
+        setValId('');
+        setValWho('');
+        setValMotivo('');
+        setValMsg('');
+        setPopup(null);
+    };
     const handleDownload = () => {
         if (VALIDATION_REQUIRED && valState !== 'approved') return;
         // Separador fixo em ";" e sem BOM — é o formato que a ferramenta de
@@ -1308,12 +1337,16 @@ function SkillSwapTool() {
             .slice(0, 60);
         a.href = url;
         const idArq = String(numero || '').replace(/\D/g, '');
-        a.download = 'template_agentes_' + (idArq ? 'ID' + idArq + '_' : '') + safeName + '.csv';
+        // o título do arquivo baixado é o número do ID (ex.: 39900.csv)
+        const nomeArq = idArq ? idArq + '.csv' : 'template_agentes_' + safeName + '.csv';
+        a.download = nomeArq;
         document.body.appendChild(a);
         a.click();
         a.remove();
-        URL.revokeObjectURL(url);
-        setDownloaded(true);
+        setTimeout(() => URL.revokeObjectURL(url), 1500);
+        // depois de baixar, a tela volta ao zero (do Comentário para baixo) para a próxima solicitação
+        resetRequest();
+        setLastDownload('Template baixado: ' + nomeArq + '. Os campos do coment\u00E1rio para baixo foram reiniciados.');
     };
     const resetMatrix = () => {
         setMatrix(null);
@@ -1586,6 +1619,7 @@ function SkillSwapTool() {
                         React.createElement("button", { onClick: handleDownload, disabled: !canDownload, className: "ct-btn-primary flex items-center gap-2 text-white px-4 py-2.5 rounded-lg text-sm font-semibold disabled:cursor-not-allowed" },
                             React.createElement(Download, { className: "w-4 h-4", strokeWidth: 2 }),
                             "Baixar template_agentes.csv")),
+                    lastDownload && React.createElement("p", { className: "text-xs mt-2.5 font-medium", style: { color: BRAND.successText } }, '\u2713 ' + lastDownload),
                     !canGenerate && React.createElement("p", { className: "text-xs mt-2.5", style: { color: '#B3B3B3' } }, "Carregue a matriz, cole os logins e digite a campanha primeiro."),
                     canGenerate && !canDownload && React.createElement("p", { className: "text-xs mt-2.5", style: { color: '#B36B00' } }, "Download bloqueado: peça a validação no passo 3 (Nome do solicitante + Nº do ID + Solicitar validação) e aguarde a aprovação."))),
             React.createElement("footer", { className: "mt-10 pt-6 flex items-center justify-center gap-2 text-xs", style: { borderTop: '1px solid ' + BRAND.border, color: '#B3B3B3' } },
