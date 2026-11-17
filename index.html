@@ -390,11 +390,12 @@ const BRAND = {
 // no rodapé só pra dar pra conferir rapidinho, num piscar de olhos, se
 // duas cópias do arquivo (por exemplo um download antigo x um novo) são
 // a mesma versão ou não, sem precisar comparar comportamento na mão.
-const BUILD_VERSION = 'build 43';
+const BUILD_VERSION = 'build 44';
 // Validação em grupo do Teams (Google Apps Script). Cole aqui a URL do Web App
 // que termina em /exec (NÃO a que termina em /dev, essa só abre pra quem edita).
-// Implantação nova do Apps Script (Versão 19, 16/11/2026 15:16). A anterior (...yJa_E2K/exec) continua ativa só para os links de pedidos antigos.
-const VALIDATION_URL = 'https://script.google.com/macros/s/AKfycbzybgGX97YS7ieEkE8QCPeSXJharzuMSueS0CN7woejMErdjRa0NsqeNCrxJ8Wk_yVr/exec';
+// Implantação do Apps Script usada pela ferramenta E pelos links do Teams (build 44: a mesma URL fica em URL_APP_ no .gs;
+// se criar outra implantação, troque nos dois lugares).
+const VALIDATION_URL = 'https://script.google.com/macros/s/AKfycbxeH6wVOnuOOLS7zlU9JGlgNM-ODzHExt6FG0v-lxZYe7dg2mdUu55mYhsv4De_jgP7/exec';
 // tempo máximo esperando a decisão antes de pedir pra verificar de novo
 const VALIDATION_TIMEOUT_MS = 30 * 60 * 1000;
 // de quanto em quanto tempo a ferramenta pergunta se já decidiram
@@ -1739,12 +1740,40 @@ const LeituraAcordo = (function () {
   const RE_NUM_APROX = /(^|[^0-9A-Z])([0-9][0-9OIL]{2,10})(?![0-9A-Z])/g;
   const RE_ROTULOS = [
     /(?:\bN ?[º°OE2*]\.?|\bN[.:]|\bNUMERO|\bNRO?\.?|\bID|\bSOLICITACAO|\bCHAMADO|\bDEMANDA|\bPROTOCOLO|\bTICKET|#)[\s:#=.\-]{0,3}(?:N ?[º°O]\.?[\s:.\-]{0,2})?([0-9][0-9OIL]{2,10})(?![0-9A-Z])/g,
-    /([0-9][0-9OIL]{2,10})\s*[|!IL1\/\\]\s*DE\b/g,                  // "... 41016 | DE: campanha - PARA: campanha"
+    /(?:^|[^0-9A-Z])([0-9][0-9OIL]{2,10})\s*[|!IL1\/\\]\s*DE\b/g,                  // "... 41016 | DE: campanha - PARA: campanha"
     /\bSKILL\b[^0-9\n]{0,24}?([0-9][0-9OIL]{2,10})(?![0-9A-Z])/g   // "TROCA DE SKILL MÓVEL (Nº mal lido) 41016"
   ];
   function soDigitos(s) { return String(s).replace(/O/g, '0').replace(/[IL]/g, '1'); }
   function semZeros(s) { return String(s).replace(/^0+(?=\d)/, ''); }
   function numeroLimpo(numero) { return semZeros(String(numero == null ? '' : numero).replace(/\D/g, '')); }
+  // Número em negrito, pequeno ou grifado sai do leitor com mais trocas: B por 8, S por 5, G por 6, Z por 2, D ou Q
+  // por 0, "|" por 1, um espaço ou ponto no meio ("41 371", "41.371") ou o "Nº" grudado ("N°41371" lido "N941371").
+  // Esses jeitos vão em "aproximados" e só servem para ACHAR o número digitado no print; nunca para dizer que o
+  // print é de outro pedido (isso continua só com os "rotulados").
+  const TROCA_DIGITO = { O: '0', Q: '0', D: '0', I: '1', L: '1', '|': '1', '!': '1', Z: '2', S: '5', G: '6', B: '8' };
+  function aproximados(sa) {
+    const out = {};
+    const vale = function (bruto) {
+      let dig = 0, n = '';
+      for (let i = 0; i < bruto.length; i++) {
+        const ch = bruto.charAt(i);
+        if (ch >= '0' && ch <= '9') { dig++; n += ch; } else if (TROCA_DIGITO[ch]) n += TROCA_DIGITO[ch]; else return;
+      }
+      if (n.length >= 4 && n.length <= 12 && dig >= n.length * 0.6 && /[0-9]/.test(bruto.charAt(0) + bruto.charAt(bruto.length - 1))) out[semZeros(n)] = true;
+    };
+    const re = /[0-9A-Z|!]+/g;
+    const W = [];
+    let m;
+    while ((m = re.exec(sa))) W.push({ t: m[0], a: m.index, b: m.index + m[0].length });
+    const junto = function (i) { return i + 1 < W.length && W[i + 1].a - W[i].b === 1 && /^[ .,]$/.test(sa.charAt(W[i].b)); };
+    for (let i = 0; i < W.length; i++) {
+      vale(W[i].t);
+      if (junto(i)) vale(W[i].t + W[i + 1].t);
+      const mN = /^N[º°92QO]([0-9OIL]{4,11})$/.exec(W[i].t);   // "Nº" grudado no número
+      if (mN) vale(mN[1]);
+    }
+    return Object.keys(out);
+  }
   function numerosDoTexto(texto) {
     const sa = semAcento(texto);
     const soltos = {}, rot = {};
@@ -1759,7 +1788,13 @@ const LeituraAcordo = (function () {
         if (n.length >= 3) rot[n] = true;
       }
     });
-    return { soltos: Object.keys(soltos), rotulados: Object.keys(rot) };
+    return { soltos: Object.keys(soltos), rotulados: Object.keys(rot), aproximados: aproximados(sa) };
+  }
+  // junta os números de duas leituras do mesmo print (a 1ª e a releitura ampliada)
+  function juntarNumeros(a, b) {
+    const u = function (x, y) { const o = {}; (x || []).concat(y || []).forEach(function (n) { o[n] = true; }); return Object.keys(o); };
+    a = a || {}; b = b || {};
+    return { soltos: u(a.soltos, b.soltos), rotulados: u(a.rotulados, b.rotulados), aproximados: u(a.aproximados, b.aproximados) };
   }
   // Confere o Nº do ID digitado com os números lidos nos prints (lista = um numerosDoTexto por print lido).
   //   'ok'         = o número digitado aparece em algum print
@@ -1773,8 +1808,8 @@ const LeituraAcordo = (function () {
     const lidos = [];
     (lista || []).forEach(function (p) {
       if (!p) return;
-      const rot = p.rotulados || [], soltos = p.soltos || [];
-      if (rot.indexOf(n) >= 0 || (n.length >= ACORDO_ID_MIN_SOLTO && soltos.indexOf(n) >= 0)) achou = true;
+      const rot = p.rotulados || [], soltos = p.soltos || [], aprox = p.aproximados || [];
+      if (rot.indexOf(n) >= 0 || (n.length >= ACORDO_ID_MIN_SOLTO && (soltos.indexOf(n) >= 0 || aprox.indexOf(n) >= 0))) achou = true;
       rot.forEach(function (x) { if (x !== n && lidos.indexOf(x) < 0) lidos.push(x); });
     });
     if (achou) return { estado: 'ok', numero: n, lidos: [] };
@@ -2019,11 +2054,186 @@ const LeituraAcordo = (function () {
       else { url = URL.createObjectURL(fonte); img.src = url; }
     });
   }
+  // ---- grifos (build 44) ----
+  // Palavra grifada no print: marca-texto de qualquer cor (o amarelo da busca do Outlook, verde, rosa, azul...), texto
+  // selecionado (letra branca no azul), letra branca numa faixa vermelha ou preta... Para o leitor, cada grifo é uma
+  // "caixa" de cor com letra dentro. acharGrifos acha essas caixas numa cópia pequena do print e devolve a cor do fundo
+  // de cada uma; o preparar() pinta a caixa de branco e a letra de preto pela distância de cor até esse fundo (vale
+  // letra escura em fundo colorido e letra clara em fundo escuro). O resto do print segue o tratamento de sempre.
+  // Sem isso o Tesseract pulava a palavra grifada em verde, rosa, vermelho, azul ou selecionada.
+  const GRIFO_MAX_PONTOS = 1.2e6;   // tamanho máximo da cópia usada para achar os grifos
+  function ehPapel(r, g, b) {       // fundo branco ou cinza bem claro, sem cor
+    const mx = r > g ? (r > b ? r : b) : (g > b ? g : b), mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
+    return mn >= 200 && mx - mn < 40;
+  }
+  function distCor(r, g, b, c) { const dr = r - c[0], dg = g - c[1], db = b - c[2]; return Math.sqrt(dr * dr + dg * dg + db * db); }
+  function lumDe(r, g, b) { return (r * 77 + g * 150 + b * 29) >> 8; }
+  function mediana(l) { const o = l.slice().sort(function (a, b) { return a - b; }); return o.length ? o[o.length >> 1] : 0; }
+  // dilatação (dilata = true) ou erosão de uma máscara 0/1 com um quadrado de lado 2r + 1 (linhas e depois colunas)
+  function morfo(a, w, h, r, dilata) {
+    const alvo = dilata ? 1 : 0, outro = dilata ? 0 : 1;
+    const t = new Uint8Array(a.length), o = new Uint8Array(a.length);
+    for (let y = 0; y < h; y++) {
+      const b = y * w;
+      let n = 0;
+      for (let x = 0; x < r && x < w; x++) if (a[b + x] === alvo) n++;
+      for (let x = 0; x < w; x++) {
+        if (x + r < w && a[b + x + r] === alvo) n++;
+        if (x - r - 1 >= 0 && a[b + x - r - 1] === alvo) n--;
+        t[b + x] = n > 0 ? alvo : outro;
+      }
+    }
+    // colunas: uma contagem por coluna, andando linha a linha (mais rápido que descer coluna por coluna)
+    const n = new Int32Array(w);
+    for (let y = 0; y < r && y < h; y++) for (let x = 0, b = y * w; x < w; x++) if (t[b + x] === alvo) n[x]++;
+    for (let y = 0; y < h; y++) {
+      const be = (y + r) * w, bs = (y - r - 1) * w, b = y * w;
+      for (let x = 0; x < w; x++) {
+        if (y + r < h && t[be + x] === alvo) n[x]++;
+        if (y - r - 1 >= 0 && t[bs + x] === alvo) n[x]--;
+        o[b + x] = n[x] > 0 ? alvo : outro;
+      }
+    }
+    return o;
+  }
+  // Uma caixa só é grifo se a borda dela (1 e 2 pontos para dentro) é de uma cor só, que não é o papel, e se tem letra
+  // dentro sem tomar a caixa toda (palavra comum em negrito, foto, logo e avatar não passam). Devolve
+  // { cor: fundo, tinta: cor da letra, clara: letra mais clara que o fundo } ou null.
+  function grifoDaCaixa(p, w, x0, y0, x1, y1) {
+    const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+    if (bw < 7 || bh < 7) return null;
+    const R = [], G = [], B = [];
+    const passo = Math.max(1, Math.round((bw + bh) / 150));
+    const pega = function (x, y) { const i = (y * w + x) * 4; R.push(p[i]); G.push(p[i + 1]); B.push(p[i + 2]); };
+    const recuos = bw >= 9 && bh >= 9 ? [1, 2] : [1];
+    recuos.forEach(function (e) {
+      for (let x = x0 + e; x <= x1 - e; x += passo) { pega(x, y0 + e); pega(x, y1 - e); }
+      for (let y = y0 + e; y <= y1 - e; y += passo) { pega(x0 + e, y); pega(x1 - e, y); }
+    });
+    const cor = [mediana(R), mediana(G), mediana(B)];
+    if (ehPapel(cor[0], cor[1], cor[2])) return null;
+    let iguais = 0;
+    for (let k = 0; k < R.length; k++) if (distCor(R[k], G[k], B[k], cor) < 48) iguais++;
+    if (iguais < R.length * 0.8) return null;
+    const TR = [], TG = [], TB = [];
+    let total = 0;
+    const pi = Math.max(1, Math.round(Math.sqrt(bw * bh / 4000)));
+    for (let y = y0; y <= y1; y += pi) {
+      for (let x = x0; x <= x1; x += pi) {
+        const i = (y * w + x) * 4;
+        total++;
+        if (distCor(p[i], p[i + 1], p[i + 2], cor) > 90) { TR.push(p[i]); TG.push(p[i + 1]); TB.push(p[i + 2]); }
+      }
+    }
+    const tinta = [mediana(TR), mediana(TG), mediana(TB)];
+    const lf = lumDe(cor[0], cor[1], cor[2]), lt = lumDe(tinta[0], tinta[1], tinta[2]);
+    const frac = TR.length / total;
+    if (TR.length < 3) return null;
+    // marca-texto claro (o amarelo da busca do Outlook) o tratamento de sempre já resolve: só entra o de fundo mais escuro
+    if (lt <= lf - 40 && lf < 190 && frac >= 0.02 && frac <= 0.6) return { cor: cor, tinta: tinta, clara: false };
+    if (lt >= lf + 70 && lf <= 170 && bw >= 10 && bh >= 10 && frac >= 0.04 && frac <= 0.55) return { cor: cor, tinta: tinta, clara: true };
+    return null;
+  }
+  // A caixa achada pode ficar curta onde a letra clara encosta na beirada (o "1" no fim do número): estica cada lado
+  // enquanto a coluna (ou a linha) de fora ainda é do fundo da caixa nas duas pontas.
+  function esticar(p, w, h, b, cor) {
+    const ok = function (x, y) { const i = (y * w + x) * 4; return distCor(p[i], p[i + 1], p[i + 2], cor) < 60; };
+    const lim = Math.max(4, b.y1 - b.y0 + 1);
+    let n = 0;
+    while (b.x1 + 1 < w && n < lim && ok(b.x1 + 1, b.y0 + 1) && ok(b.x1 + 1, b.y1 - 1)) { b.x1++; n++; }
+    for (n = 0; b.x0 > 0 && n < lim && ok(b.x0 - 1, b.y0 + 1) && ok(b.x0 - 1, b.y1 - 1); n++) b.x0--;
+    for (n = 0; b.y1 + 1 < h && n < lim && ok(b.x0 + 1, b.y1 + 1) && ok(b.x1 - 1, b.y1 + 1); n++) b.y1++;
+    for (n = 0; b.y0 > 0 && n < lim && ok(b.x0 + 1, b.y0 - 1) && ok(b.x1 - 1, b.y0 - 1); n++) b.y0--;
+    return b;
+  }
+  // componentes ligados (4 vizinhos) de uma máscara 0/1: chama fim(x0, y0, x1, y1) para cada um
+  function componentes(m, w, h, fim) {
+    const N = w * h, visto = new Uint8Array(N), pilha = new Int32Array(N);
+    let achados = 0;
+    for (let i0 = 0; i0 < N && achados < 2000; i0++) {
+      if (!m[i0] || visto[i0]) continue;
+      let topo = 0, x0 = w, y0 = h, x1 = -1, y1 = -1;
+      pilha[topo++] = i0;
+      visto[i0] = 1;
+      while (topo > 0) {
+        const k = pilha[--topo], x = k % w, y = (k - x) / w;
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+        if (x > 0 && m[k - 1] && !visto[k - 1]) { visto[k - 1] = 1; pilha[topo++] = k - 1; }
+        if (x < w - 1 && m[k + 1] && !visto[k + 1]) { visto[k + 1] = 1; pilha[topo++] = k + 1; }
+        if (y > 0 && m[k - w] && !visto[k - w]) { visto[k - w] = 1; pilha[topo++] = k - w; }
+        if (y < h - 1 && m[k + w] && !visto[k + w]) { visto[k + w] = 1; pilha[topo++] = k + w; }
+      }
+      achados++;
+      fim(x0, y0, x1, y1);
+    }
+  }
+  // Devolve { caixas: [{ x0, y0, x1, y1 (no print original), cor, tinta, clara }], cheio, f, w, h }. "cheio" marca as
+  // áreas pintadas (caixas e manchas), onde a regra da letra colorida do preparar() não entra.
+  //   A) letra escura em caixa de cor (marca-texto): a caixa inteira (fundo + letra) não é papel; "abrir" a máscara
+  //      some com o traço fino das letras comuns e deixa a caixa.
+  //   B) letra clara em caixa colorida ou preta (texto selecionado, letra branca no vermelho): antes de abrir, "fecha"
+  //      os buracos que a letra clara deixa na caixa. Duas vezes: fechando 1 ponto (não gruda o nome colorido da linha
+  //      de cima) e 2 pontos (letra clara em negrito).
+  function acharGrifos(img) {
+    const w0 = img.naturalWidth || img.width, h0 = img.naturalHeight || img.height;
+    const f = Math.min(1, Math.sqrt(GRIFO_MAX_PONTOS / (w0 * h0)));
+    const w = Math.max(1, Math.round(w0 * f)), h = Math.max(1, Math.round(h0 * f));
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    const p = ctx.getImageData(0, 0, w, h).data;
+    const N = w * h;
+    const m = new Uint8Array(N), cor = new Uint8Array(N);
+    let nCor = 0;
+    for (let i = 0, j = 0; j < N; i += 4, j++) {
+      const r = p[i], g = p[i + 1], b = p[i + 2];
+      const mx = r > g ? (r > b ? r : b) : (g > b ? g : b), mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
+      if (mn >= 200 && mx - mn < 40) continue;                    // papel
+      m[j] = 1;
+      if (mx - mn >= 60 || r * 77 + g * 150 + b * 29 < 80 * 256) { cor[j] = 1; nCor++; }   // bem colorido ou bem escuro
+    }
+    const rA = Math.max(1, Math.round(4 * f));   // some com traço de até 8 pontos (letra em negrito + borrão do JPEG)
+    const caixas = [];
+    const guarda = function (clara) {
+      return function (x0, y0, x1, y1) {
+        if (caixas.length >= 400) return;
+        const X0 = x0 / f, Y0 = y0 / f, X1 = (x1 + 1) / f, Y1 = (y1 + 1) / f;
+        // a mesma caixa achada de novo (passada B com outro raio) não entra duas vezes
+        if (caixas.some(function (o) {
+          const ix = Math.min(o.x1, X1) - Math.max(o.x0, X0), iy = Math.min(o.y1, Y1) - Math.max(o.y0, Y0);
+          return ix > 0 && iy > 0 && ix * iy > 0.5 * Math.min((o.x1 - o.x0) * (o.y1 - o.y0), (X1 - X0) * (Y1 - Y0));
+        })) return;
+        const g = grifoDaCaixa(p, w, x0, y0, x1, y1);
+        if (!g || g.clara !== clara) return;
+        const b = esticar(p, w, h, { x0: x0, y0: y0, x1: x1, y1: y1 }, g.cor);
+        caixas.push({ x0: b.x0 / f, y0: b.y0 / f, x1: (b.x1 + 1) / f, y1: (b.y1 + 1) / f, cor: g.cor, tinta: g.tinta, clara: clara });
+      };
+    };
+    const cheio = morfo(morfo(m, w, h, rA, false), w, h, rA, true);
+    componentes(cheio, w, h, guarda(false));
+    if (nCor > N * 0.002) {
+      [1, 2].forEach(function (rB) {
+        // fechar (dilata rB, erode rB) e abrir (erode rA, dilata rA): as duas erosões seguidas viram uma só, de rB + rA
+        const cB = morfo(morfo(morfo(cor, w, h, rB, true), w, h, rB + rA, false), w, h, rA, true);
+        componentes(cB, w, h, guarda(true));
+      });
+    }
+    return { caixas: caixas, cheio: cheio, f: f, w: w, h: h };
+  }
   // Prepara a imagem para o OCR: amplia (letra de print de tela é pequena), passa para tons de cinza, estica os
   // níveis e põe uma margem branca em volta. Com os níveis esticados o marca-texto amarelo da busca do Outlook vira
   // branco e a palavra marcada passa a ser lida (sem isso o Tesseract pulava justamente o "Negado." e o "Pode seguir."
   // marcados). A margem evita erro de leitura em letra encostada ou cortada na borda do print.
-  function preparar(img, ampliar) {
+  // Build 44: letra colorida clara (laranja, verde-claro) fica escura e os grifos (acharGrifos) viram letra preta no
+  // branco. Devolve o canvas com a escala (esc) e a margem (margem) usadas, para achar as linhas no print original.
+  function preparar(img, ampliar, grifos) {
     const w0 = img.naturalWidth || img.width, h0 = img.naturalHeight || img.height;
     const esc = Math.max(1, Math.min(ampliar, Math.sqrt(TETO_PIXELS / (w0 * h0))));
     const c = document.createElement('canvas');
@@ -2035,17 +2245,66 @@ const LeituraAcordo = (function () {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(img, 0, 0, c.width, c.height);
-    const d = ctx.getImageData(0, 0, c.width, c.height), p = d.data, n = p.length;
+    const W = c.width;
+    const d = ctx.getImageData(0, 0, W, c.height), p = d.data, n = p.length;
     let soma = 0;
-    for (let i = 0; i < n; i += 4) { const y = (p[i] * 77 + p[i + 1] * 150 + p[i + 2] * 29) >> 8; p[i] = y; soma += y; }
+    for (let i = 0; i < n; i += 4) soma += lumDe(p[i], p[i + 1], p[i + 2]);
     const escuro = soma / (n / 4) < 110;        // tema escuro (letra clara em fundo escuro): inverte
+    const cheio = grifos && grifos.cheio, gf = grifos ? grifos.f / esc : 0, gw = grifos ? grifos.w : 0, gh = grifos ? grifos.h : 0;
     for (let i = 0; i < n; i += 4) {
-      let y = escuro ? 255 - p[i] : p[i];
+      const r = p[i], g = p[i + 1], b = p[i + 2];
+      const lum = lumDe(r, g, b);
+      let y = escuro ? 255 - lum : lum;
       y = ((y - 60) * 255 / 130) | 0;
       y = y < 0 ? 0 : (y > 255 ? 255 : y);
+      if (!escuro && lum < 210) {
+        // letra colorida clara (laranja, verde-claro...) fica escura. Em área pintada (marca-texto colorido, mesmo o que
+        // não virou caixa de grifo, como o rosa num JPEG) é o contrário: o fundo vivo clareia e a letra preta fica (a
+        // letra preta "manchada" de cor pelo JPEG não é viva: o canal mais forte dela fica baixo).
+        const mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
+        const sat = mx - (r < g ? (r < b ? r : b) : (g < b ? g : b));
+        if (sat > 80) {
+          let pintado = false;
+          if (cheio) {
+            const k = i >> 2, px = k % W, py = (k - px) / W;
+            const gx = Math.min(gw - 1, (px * gf) | 0), gy = Math.min(gh - 1, (py * gf) | 0);
+            pintado = cheio[gy * gw + gx] === 1;
+          }
+          if (!pintado) { const t = 255 - ((sat * 13 / 10) | 0); if (t < y) y = t < 0 ? 0 : t; }
+          else if (mx >= 160 && lum >= 60) y = 255 - ((255 - y) >> 2);
+        }
+      }
       p[i] = p[i + 1] = p[i + 2] = y;
       p[i + 3] = 255;
     }
+    // grifos: dentro de cada caixa, letra preta no branco pelo brilho entre o fundo da caixa (= branco) e a cor da
+    // letra (= preto); o brilho é o que o JPEG guarda melhor (a cor ele borra perto da letra). Caixa de letra escura
+    // pega também 2 pontos de beirada (o borrão do JPEG); na de letra clara, a beirada de 1 ponto fica branca.
+    ((grifos && grifos.caixas) || []).forEach(function (cx) {
+      const fora = cx.clara ? 0 : 2;
+      const sx0 = Math.max(0, Math.floor((cx.x0 - fora) * esc)), sy0 = Math.max(0, Math.floor((cx.y0 - fora) * esc));
+      const sx1 = Math.min(W, Math.ceil((cx.x1 + fora) * esc)), sy1 = Math.min(c.height, Math.ceil((cx.y1 + fora) * esc));
+      const bw = sx1 - sx0, bh = sy1 - sy0;
+      if (bw <= 0 || bh <= 0) return;
+      const q = ctx.getImageData(sx0, sy0, bw, bh).data;   // cores originais (o canvas ainda não recebeu o tratamento)
+      const lf = lumDe(cx.cor[0], cx.cor[1], cx.cor[2]), lt = lumDe(cx.tinta[0], cx.tinta[1], cx.tinta[2]);
+      const vao = Math.max(30, Math.abs(lf - lt));
+      const beira = cx.clara ? Math.max(1, Math.round(esc)) : 0;
+      for (let yy = 0; yy < bh; yy++) {
+        for (let xx = 0; xx < bw; xx++) {
+          const k = (yy * bw + xx) * 4;
+          let v = 255;
+          if (xx >= beira && yy >= beira && xx < bw - beira && yy < bh - beira) {
+            const lp = lumDe(q[k], q[k + 1], q[k + 2]);
+            v = cx.clara ? 255 - (lp - lf) * 255 / vao : (lp - lt) * 255 / vao;
+            v = ((v - 60) * 255 / 130) | 0;              // estica como no resto do print
+            v = v < 0 ? 0 : (v > 255 ? 255 : v);
+          }
+          const i = ((sy0 + yy) * W + sx0 + xx) * 4;
+          p[i] = p[i + 1] = p[i + 2] = v;
+        }
+      }
+    });
     ctx.putImageData(d, 0, 0);
     // margem branca em volta: letra encostada ou cortada na borda do print era lida errado (num print real, o
     // "Nº 41016" do assunto, cortado no alto, saía "410716"; com a margem sai certo)
@@ -2057,7 +2316,12 @@ const LeituraAcordo = (function () {
     ctx2.fillStyle = '#fff';
     ctx2.fillRect(0, 0, c2.width, c2.height);
     ctx2.drawImage(c, m, m);
+    c2.esc = esc;
+    c2.margem = m;
     return c2;
+  }
+  function grifosDe(img) {
+    try { return acharGrifos(img); } catch (e) { return null; }   // sem os grifos a leitura segue como antes
   }
   function juntar(a, b) {
     const out = { sim: {}, nao: {}, misto: {}, encontrados: {} };
@@ -2069,21 +2333,84 @@ const LeituraAcordo = (function () {
     });
     return out;
   }
+  // Linhas do print que podem ter o Nº do ID (número com 3 ou mais dígitos, "Nº", "ID", "solicitação", "chamado"...),
+  // já na escala do print original, a partir das posições que o leitor devolve (tsv). As com rótulo vêm primeiro.
+  const RE_LINHA_ROTULO = /\bN ?[º°]|\bID\b|SOLICITA|CHAMADO|DEMANDA|PROTOCOLO|TICKET|SKILL/;
+  function linhasComNumero(tsv, prep) {
+    const L = {}, ordem = [];
+    String(tsv || '').split('\n').forEach(function (l) {
+      const c = l.split('\t');
+      if (c.length < 12 || c[0] !== '5') return;              // 5 = palavra
+      const txt = c.slice(11).join(' ').trim();
+      if (!txt) return;
+      const k = c[2] + '.' + c[3] + '.' + c[4];
+      const x = +c[6], y = +c[7], x2 = x + (+c[8]), y2 = y + (+c[9]);
+      let li = L[k];
+      if (!li) { li = L[k] = { x0: x, y0: y, x1: x2, y1: y2, t: [] }; ordem.push(li); }
+      li.x0 = Math.min(li.x0, x); li.y0 = Math.min(li.y0, y); li.x1 = Math.max(li.x1, x2); li.y1 = Math.max(li.y1, y2);
+      li.t.push(txt);
+    });
+    const esc = prep.esc || 1, mg = prep.margem || 0;
+    return ordem.map(function (li, i) {
+      const t = semAcento(li.t.join(' '));
+      return { li: li, i: i, nota: (RE_LINHA_ROTULO.test(t) ? 2 : 0) + (/[0-9]{3}/.test(t) ? 1 : 0) };
+    }).filter(function (o) { return o.nota > 0; })
+      .sort(function (a, b) { return b.nota - a.nota || a.i - b.i; })
+      .slice(0, 4)
+      .map(function (o) { return { x0: (o.li.x0 - mg) / esc, y0: (o.li.y0 - mg) / esc, x1: (o.li.x1 - mg) / esc, y1: (o.li.y1 - mg) / esc }; });
+  }
   async function lerUm(arquivo) {
     const img = await abrirImagem(arquivo.original || arquivo.dataUrl);
     const w = await pegarMotor();
+    const grifos = grifosDe(img);
     // 1ª passada: imagem ampliada, texto lido linha a linha de cima para baixo (o print normal: só o e-mail)
     await w.setParameters({ tessedit_pageseg_mode: '6', user_defined_dpi: '0' });
-    let texto = String((await comPrazo(vigiado(w.recognize(preparar(img, 2))), 150000, 'a leitura do print demorou demais')).data.text || '');
+    const prep = preparar(img, 2, grifos);
+    const r1 = (await comPrazo(vigiado(w.recognize(prep, {}, { text: true, tsv: true })), 150000, 'a leitura do print demorou demais')).data;
+    let texto = String(r1.text || '');
+    let linhas = [];
+    try { linhas = linhasComNumero(r1.tsv, prep); } catch (e) { linhas = []; }
     let leitura = analisar(texto);
     if (Object.keys(leitura.sim).length === 0 && Object.keys(leitura.nao).length === 0 && Object.keys(leitura.misto).length === 0) {
       // nada lido: 2ª passada com a divisão automática da página (print da janela inteira, com várias colunas)
       await w.setParameters({ tessedit_pageseg_mode: '3', user_defined_dpi: '96' });
-      const texto2 = String((await comPrazo(vigiado(w.recognize(preparar(img, 1))), 150000, 'a leitura do print demorou demais')).data.text || '');
+      const texto2 = String((await comPrazo(vigiado(w.recognize(preparar(img, 1, grifos))), 150000, 'a leitura do print demorou demais')).data.text || '');
       leitura = juntar(leitura, analisar(texto2));
       texto += '\n-----\n' + texto2;
     }
-    return { texto: texto, leitura: leitura, numeros: numerosDoTexto(texto) };
+    return { texto: texto, leitura: leitura, numeros: numerosDoTexto(texto), linhas: linhas };
+  }
+  // Releitura do Nº do ID: cada linha com número é recortada do print original e lida sozinha, bem ampliada, duas
+  // vezes (a linha com uns 64 e uns 96 pontos de altura). Número em negrito ou pequeno, que a 1ª leitura trocava
+  // (4 por 8, 8 por 6), costuma sair certo em pelo menos uma delas.
+  async function relerLinhas(arquivo, linhas) {
+    let texto = '';
+    if (!linhas || linhas.length === 0) return { texto: texto, numeros: numerosDoTexto(texto) };
+    const img = await abrirImagem(arquivo.original || arquivo.dataUrl);
+    const w0 = img.naturalWidth || img.width, h0 = img.naturalHeight || img.height;
+    const w = await pegarMotor();
+    await w.setParameters({ tessedit_pageseg_mode: '7', user_defined_dpi: '0' });
+    for (let k = 0; k < linhas.length; k++) {
+      const L = linhas[k];
+      const alt = Math.max(4, L.y1 - L.y0);
+      const x0 = Math.max(0, Math.floor(L.x0 - alt)), x1 = Math.min(w0, Math.ceil(L.x1 + alt));
+      const y0 = Math.max(0, Math.floor(L.y0 - alt * 0.35)), y1 = Math.min(h0, Math.ceil(L.y1 + alt * 0.35));
+      if (x1 - x0 < 4 || y1 - y0 < 4) continue;
+      const cv = document.createElement('canvas');
+      cv.width = x1 - x0;
+      cv.height = y1 - y0;
+      const g = cv.getContext('2d');
+      g.fillStyle = '#fff';
+      g.fillRect(0, 0, cv.width, cv.height);
+      g.drawImage(img, x0, y0, cv.width, cv.height, 0, 0, cv.width, cv.height);
+      const gr = grifosDe(cv);
+      for (let a = 0; a < 2; a++) {
+        const fator = Math.max(2, Math.min(9, (a === 0 ? 64 : 96) / alt));
+        const t = (await comPrazo(vigiado(w.recognize(preparar(cv, fator, gr))), 60000, 'a leitura do print demorou demais')).data.text;
+        texto += String(t || '').trim() + '\n';
+      }
+    }
+    return { texto: texto, numeros: numerosDoTexto(texto) };
   }
   function chaveDe(a) {
     const s = String(a.dataUrl || '');
@@ -2092,10 +2419,16 @@ const LeituraAcordo = (function () {
   const ETAPAS = { 'loading tesseract core': 'Baixando o leitor de prints', 'initializing tesseract': 'Iniciando o leitor de prints',
     'loading language traineddata': 'Baixando o leitor de prints', 'initializing api': 'Iniciando o leitor de prints', 'recognizing text': 'Lendo' };
   // Lê os prints (só as imagens). arquivos = [{ dataUrl, original (opcional), name }]; aviso(texto) recebe o andamento.
-  // Devolve { leituras: [...], textos: [...], numeros: [...], falhas: quantos não deu para ler, motivo: erro técnico (se houve) }.
-  function lerPrints(arquivos, aviso) {
+  // opcoes.numero = Nº do ID digitado: se ele não aparece na 1ª leitura de nenhum print, as linhas com número de cada
+  // print são relidas ampliadas (relerLinhas) e os números lidos entram junto. Cada print é relido uma vez só.
+  // Devolve { leituras: [...], textos: [...], numeros: [...], falhas: quantos não deu para ler, motivo: erro técnico (se houve),
+  //   relidos: verdadeiro quando houve a releitura }.
+  const relidas = {};               // imagem -> Promise da releitura das linhas com número
+  function lerPrints(arquivos, aviso, opcoes) {
     const lista = (arquivos || []).filter(function (a) { return a && /^data:image\//.test(String(a.dataUrl || '')); }).slice(0, 6);
-    const out = { leituras: [], textos: [], numeros: [], falhas: 0, motivo: '' };
+    const out = { leituras: [], textos: [], numeros: [], falhas: 0, motivo: '', relidos: false };
+    const numero = numeroLimpo(opcoes && opcoes.numero);
+    const lidas = [];               // por print: a 1ª leitura e a posição dela em out (ou nada, se falhou)
     emUso++;
     clearTimeout(motorOcioso);
     let p = Promise.resolve();
@@ -2119,6 +2452,7 @@ const LeituraAcordo = (function () {
           tarefa.catch(function () { delete guardadas[chave]; });      // falhou: da próxima vez tenta ler de novo
         }
         return guardadas[chave].then(function (r) {
+          lidas[k] = { r: r, pos: out.numeros.length, chave: chave };
           out.leituras.push(r.leitura);
           out.textos.push(r.texto);
           out.numeros.push(r.numeros);
@@ -2130,6 +2464,31 @@ const LeituraAcordo = (function () {
       });
     });
     return p.then(function () {
+      if (!precisaReler(numero, out.numeros)) return null;
+      out.relidos = true;
+      let q = Promise.resolve();
+      lidas.forEach(function (x, k) {
+        if (!x || !x.r.linhas || x.r.linhas.length === 0) return;
+        q = q.then(function () {
+          if (!relidas[x.chave]) {
+            const tarefa = fila.then(function () {
+              const txt = 'Conferindo o Nº do ID no print' + (lista.length > 1 ? ' ' + (k + 1) + ' de ' + lista.length : '') + '…';
+              avisoAtual = function () { if (aviso) aviso(txt); };
+              if (aviso) aviso(txt);
+              return relerLinhas(lista[k], x.r.linhas);
+            });
+            relidas[x.chave] = tarefa;
+            fila = tarefa.catch(function () { /* o próximo print segue mesmo se este falhar */ });
+            tarefa.catch(function () { delete relidas[x.chave]; });
+          }
+          return relidas[x.chave].then(function (z) {
+            out.numeros[x.pos] = juntarNumeros(out.numeros[x.pos], z.numeros);
+            out.textos[x.pos] += '\n-----releitura-----\n' + z.texto;
+          }, function () { /* a releitura falhou: vale a 1ª leitura */ });
+        });
+      });
+      return q;
+    }).then(function () {
       emUso = Math.max(0, emUso - 1);
       clearTimeout(motorOcioso);
       if (emUso === 0) {
@@ -2138,6 +2497,11 @@ const LeituraAcordo = (function () {
       }
       return out;
     });
+  }
+  // O Nº do ID digitado (4 dígitos ou mais) não aparece nos números lidos: vale reler as linhas com número.
+  function precisaReler(numero, numeros) {
+    const n = numeroLimpo(numero);
+    return n.length >= 4 && conferirId(n, numeros).estado !== 'ok';
   }
 
   // Baixa e inicia o leitor ANTES do primeiro print (a troca já vai precisar de print): quando o print entrar, a leitura
@@ -2153,7 +2517,8 @@ const LeituraAcordo = (function () {
 
   return {
     analisar: analisar, decidir: decidir, resultado: resultado, lerPrints: lerPrints, sinaisDoTrecho: sinaisDoTrecho,
-    juntarNomes: juntarNomes, nomes: nomes, numerosDoTexto: numerosDoTexto, conferirId: conferirId, comentarioLibera: comentarioLibera, aquecer: aquecer
+    juntarNomes: juntarNomes, nomes: nomes, numerosDoTexto: numerosDoTexto, conferirId: conferirId, comentarioLibera: comentarioLibera, aquecer: aquecer,
+    precisaReler: precisaReler
   };
 })();
 
@@ -2248,6 +2613,9 @@ function SkillSwapTool() {
     const [acordoManual, setAcordoManual] = useState('');
     const [acordoInfo, setAcordoInfo] = useState(null);
     const acordoChave = useRef('');
+    // Nº do ID "parado" (0,7 s sem digitar): é com ele que a tela decide reler os prints (build 44, ver mais abaixo)
+    const [numeroParado, setNumeroParado] = useState('');
+    const numeroParadoRef = useRef('');
     // nome do analista que está fazendo a solicitação
     const [solicitante, setSolicitante] = useState('');
     // card "Aprovação": prints e arquivos da aprovação (opcional, um ou mais)
@@ -2407,6 +2775,7 @@ function SkillSwapTool() {
     const precisaLer = leituraVale && acordoImgs.length > 0;
     // a troca vai precisar de print: o leitor já é baixado e iniciado agora, e a leitura começa assim que o print entrar
     useEffect(() => { if (leituraVale) LeituraAcordo.aquecer(); }, [leituraVale]);
+    numeroParadoRef.current = numeroParado; // a leitura dos prints (efeito abaixo) usa o Nº do ID mais recente
     useEffect(() => {
         const chave = precisaLer ? acordoImgs.map((f) => f.id).join('|') : '';
         if (chave === acordoChave.current) return;
@@ -2418,19 +2787,42 @@ function SkillSwapTool() {
         const pronto = (out) => {
             if (acordoChave.current !== chave) return; // os prints mudaram no meio da leitura: vale a leitura nova
             setAcordoAndamento('');
-            setAcordoLido({ chave, pronto: true, leituras: out.leituras, numeros: out.numeros, falhas: out.falhas, motivo: out.motivo });
+            setAcordoLido({ chave, pronto: true, leituras: out.leituras, numeros: out.numeros, falhas: out.falhas, motivo: out.motivo, relidos: Boolean(out.relidos) });
         };
+        // com o Nº do ID já digitado, a releitura ampliada (quando precisa) vem junto, sem mostrar o resultado pela metade
         LeituraAcordo.lerPrints(acordoImgs.map((f) => ({ dataUrl: f.dataUrl, original: f.original, name: f.name })),
-            (t) => { if (acordoChave.current === chave) setAcordoAndamento(t); })
+            (t) => { if (acordoChave.current === chave) setAcordoAndamento(t); }, { numero: numeroParadoRef.current })
             .then(pronto, (err) => pronto({ leituras: [], numeros: [], falhas: acordoImgs.length, motivo: String((err && err.message) || err).slice(0, 140) }));
     }, [precisaLer, acordoImgs]);
+    // Nº do ID que a 1ª leitura não achou no print (número em negrito, pequeno ou grifado): 0,7 s depois que o analista
+    // para de digitar, os prints são relidos só nas linhas com número, bem ampliadas. Cada print é relido uma vez só;
+    // os números da releitura entram junto com os da 1ª leitura.
+    useEffect(() => { const t = setTimeout(() => setNumeroParado(numero), 700); return () => clearTimeout(t); }, [numero]);
+    useEffect(() => {
+        const lido = acordoLido;
+        if (!precisaLer || !lido || !lido.pronto || lido.relendo || lido.relidos || lido.chave !== acordoChave.current) return;
+        if (!LeituraAcordo.precisaReler(numeroParado, lido.numeros)) return;
+        const chave = lido.chave;
+        setAcordoLido(Object.assign({}, lido, { relendo: true }));
+        setAcordoAndamento('Conferindo o Nº do ID no print…');
+        const fim = (out) => {
+            if (acordoChave.current !== chave) return; // os prints mudaram no meio: vale a leitura nova
+            setAcordoAndamento('');
+            setAcordoLido(out ? { chave, pronto: true, leituras: out.leituras, numeros: out.numeros, falhas: out.falhas, motivo: out.motivo, relidos: true }
+                : Object.assign({}, lido, { relendo: false, relidos: true }));
+        };
+        LeituraAcordo.lerPrints(acordoImgs.map((f) => ({ dataUrl: f.dataUrl, original: f.original, name: f.name })),
+            (t) => { if (acordoChave.current === chave) setAcordoAndamento(t); }, { numero: numeroParado })
+            .then(fim, () => fim(null));
+    }, [precisaLer, acordoLido, numeroParado, acordoImgs]);
     const acordoPronto = Boolean(precisaLer && acordoLido && acordoLido.pronto);
     const acordoRes = useMemo(() => (acordoPronto
         ? LeituraAcordo.resultado(acordoLido, { exigeNome: printNeeded, manual: acordoManual, numero, comentario: comment })
         : null), [acordoPronto, acordoLido, printNeeded, acordoManual, numero, comment]);
-    const acordoLendo = precisaLer && !acordoPronto;
+    // relendo o Nº do ID conta como "lendo": o botão espera a releitura terminar
+    const acordoLendo = precisaLer && (!acordoPronto || Boolean(acordoLido && acordoLido.relendo));
     // sem print para ler (ou sem regra de print) não trava nada aqui; com print, só segue quando a leitura libera
-    const acordoOk = !precisaLer || Boolean(acordoRes && acordoRes.envio);
+    const acordoOk = !precisaLer || (!acordoLendo && Boolean(acordoRes && acordoRes.envio));
     // outra matriz: precisa dizer qual, e não pode ser ALM / TEL / AEC
     const otherTrim = otherName.trim();
     const otherBlocked = otherOn && otherMatrixBlocked(otherTrim);
