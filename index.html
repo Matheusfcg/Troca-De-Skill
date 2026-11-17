@@ -390,12 +390,13 @@ const BRAND = {
 // no rodapé só pra dar pra conferir rapidinho, num piscar de olhos, se
 // duas cópias do arquivo (por exemplo um download antigo x um novo) são
 // a mesma versão ou não, sem precisar comparar comportamento na mão.
-const BUILD_VERSION = 'build 44';
+const BUILD_VERSION = 'build 45';
 // Validação em grupo do Teams (Google Apps Script). Cole aqui a URL do Web App
 // que termina em /exec (NÃO a que termina em /dev, essa só abre pra quem edita).
-// Implantação do Apps Script usada pela ferramenta E pelos links do Teams (build 44: a mesma URL fica em URL_APP_ no .gs;
-// se criar outra implantação, troque nos dois lugares).
-const VALIDATION_URL = 'https://script.google.com/macros/s/AKfycbxeH6wVOnuOOLS7zlU9JGlgNM-ODzHExt6FG0v-lxZYe7dg2mdUu55mYhsv4De_jgP7/exec';
+// Implantação do Apps Script usada pela ferramenta E pelos links do Teams (a mesma URL fica em URL_APP_ no .gs).
+// Build 45: implantação criada em 17/11/2026 14:33. Para atualizar o código, edite ESTA implantação e escolha "Nova versão"
+// (a URL não muda); implantação nova muda a URL e obriga a trocar aqui e no URL_APP_ do .gs.
+const VALIDATION_URL = 'https://script.google.com/macros/s/AKfycbwYLmKfdDloJ70SkCBHBZq2fszKN7ReWKIIVWykiwI5Gx8MUP0rXwPwMmRSf8jsu-5a/exec';
 // tempo máximo esperando a decisão antes de pedir pra verificar de novo
 const VALIDATION_TIMEOUT_MS = 30 * 60 * 1000;
 // de quanto em quanto tempo a ferramenta pergunta se já decidiram
