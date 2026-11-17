@@ -258,6 +258,9 @@ select.ct-input{-webkit-appearance:none;appearance:none;background-image:url("da
 </style>
 <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<!-- build 46: se o unpkg.com não responder (fora do ar ou barrado na rede), busca a MESMA versão no jsDelivr -->
+<script>if (typeof React === 'undefined') document.write('<script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"><\/script>');</script>
+<script>if (typeof ReactDOM === 'undefined') document.write('<script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"><\/script>');</script>
 <!-- SheetJS: versão fixa (não muda sozinha) e "defer" (a tela abre sem esperar). A mesma versão está em XLSX_URL. -->
 <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
@@ -292,8 +295,8 @@ select.ct-input{-webkit-appearance:none;appearance:none;background-image:url("da
   });
   window.addEventListener('DOMContentLoaded', function () {
     setTimeout(function () {
-      if (typeof React === 'undefined') { showBootError('React não carregou (CDN unpkg.com/react pode estar bloqueado).'); return; }
-      if (typeof ReactDOM === 'undefined') { showBootError('ReactDOM não carregou (CDN unpkg.com/react-dom pode estar bloqueado).'); return; }
+      if (typeof React === 'undefined') { showBootError('React não carregou (unpkg.com e cdn.jsdelivr.net podem estar bloqueados).'); return; }
+      if (typeof ReactDOM === 'undefined') { showBootError('ReactDOM não carregou (unpkg.com e cdn.jsdelivr.net podem estar bloqueados).'); return; }
       if (typeof XLSX === 'undefined') { showBootError('XLSX não carregou (CDN cdn.sheetjs.com pode estar bloqueado).'); return; }
       if (document.getElementById('root') && document.getElementById('root').childElementCount === 0) {
         showBootError('As bibliotecas carregaram, mas a ferramenta não desenhou nada na tela. Avise quem está ajustando a ferramenta.');
@@ -390,7 +393,7 @@ const BRAND = {
 // no rodapé só pra dar pra conferir rapidinho, num piscar de olhos, se
 // duas cópias do arquivo (por exemplo um download antigo x um novo) são
 // a mesma versão ou não, sem precisar comparar comportamento na mão.
-const BUILD_VERSION = 'build 45';
+const BUILD_VERSION = 'build 46';
 // Validação em grupo do Teams (Google Apps Script). Cole aqui a URL do Web App
 // que termina em /exec (NÃO a que termina em /dev, essa só abre pra quem edita).
 // Implantação do Apps Script usada pela ferramenta E pelos links do Teams (a mesma URL fica em URL_APP_ no .gs).
@@ -1966,6 +1969,8 @@ const LeituraAcordo = (function () {
   let fila = Promise.resolve(); // um print de cada vez
   const guardadas = {};         // imagem -> Promise da leitura (não lê duas vezes o mesmo print)
   let quebra = null;            // rejeita a leitura em andamento se o worker do leitor quebrar no meio
+  let quebrou = null;           // quebra que chegou fora de uma chamada ao leitor: a próxima chamada já sai com o erro
+  let motorDesde = 0;           // quando o leitor atual ficou pronto (quebra mais antiga que isso era do leitor velho)
 
   // Erro dentro do worker do leitor (a rede barrou um arquivo dele, faltou memória...) chega à página como um erro
   // comum. Aqui a leitura em andamento é encerrada na hora (fica "indisponível" e o analista segue pelo modo manual),
@@ -1974,15 +1979,18 @@ const LeituraAcordo = (function () {
     window.addEventListener('error', function (e) {
       const arquivo = String((e && e.filename) || ''), msg = String((e && e.message) || '');
       if (!/^blob:/.test(arquivo) && !/tesseract|WorkerGlobalScope|importScripts/i.test(arquivo + ' ' + msg)) return;
+      const erro = new Error('o leitor de prints parou (' + msg.slice(0, 80) + ')');
       if (quebra) {
         const q = quebra;
         quebra = null;
-        q(new Error('o leitor de prints parou (' + msg.slice(0, 80) + ')'));
-      }
+        q(erro);
+      } else quebrou = { erro: erro, quando: Date.now() };
     });
   }
   function vigiado(promessa) {
     return new Promise(function (resolve, reject) {
+      if (quebrou && quebrou.quando >= motorDesde) { const e = quebrou.erro; quebrou = null; reject(e); return; }
+      quebrou = null;
       quebra = reject;
       promessa.then(function (v) { quebra = null; resolve(v); }, function (e) { quebra = null; reject(e); });
     });
@@ -2022,6 +2030,7 @@ const LeituraAcordo = (function () {
         clearTimeout(t);
         if (fim) { Promise.resolve().then(function () { return w.terminate(); }).catch(function () { /* já tinha desistido */ }); return; }
         fim = true;
+        motorDesde = Date.now();
         resolve(w);
       }, function (e) { clearTimeout(t); falha(e); });
     });
@@ -2130,8 +2139,9 @@ const LeituraAcordo = (function () {
     const lf = lumDe(cor[0], cor[1], cor[2]), lt = lumDe(tinta[0], tinta[1], tinta[2]);
     const frac = TR.length / total;
     if (TR.length < 3) return null;
-    // marca-texto claro (o amarelo da busca do Outlook) o tratamento de sempre já resolve: só entra o de fundo mais escuro
-    if (lt <= lf - 40 && lf < 190 && frac >= 0.02 && frac <= 0.6) return { cor: cor, tinta: tinta, clara: false };
+    // marca-texto claro (o amarelo da busca do Outlook): o preparar() só usa esta caixa em print de tema escuro (lá o
+    // amarelo fica escuro ao inverter); no print claro o tratamento de sempre já resolve
+    if (lt <= lf - 40 && frac >= 0.02 && frac <= 0.6) return { cor: cor, tinta: tinta, clara: false, fundoClaro: lf >= 190 };
     if (lt >= lf + 70 && lf <= 170 && bw >= 10 && bh >= 10 && frac >= 0.04 && frac <= 0.55) return { cor: cor, tinta: tinta, clara: true };
     return null;
   }
@@ -2178,7 +2188,11 @@ const LeituraAcordo = (function () {
   //   B) letra clara em caixa colorida ou preta (texto selecionado, letra branca no vermelho): antes de abrir, "fecha"
   //      os buracos que a letra clara deixa na caixa. Duas vezes: fechando 1 ponto (não gruda o nome colorido da linha
   //      de cima) e 2 pontos (letra clara em negrito).
-  function acharGrifos(img) {
+  //   C) marca-texto em print de tema escuro (build 46): lá tudo "não é papel" e a passada A não separa a caixa; aqui só
+  //      os pontos de cor viva e clara, fechando o buraco da letra escura.
+  // Assíncrona (build 46): entre uma passada e outra a tela respira.
+  const pausa = function () { return new Promise(function (r) { setTimeout(r, 0); }); };
+  async function acharGrifos(img) {
     const w0 = img.naturalWidth || img.width, h0 = img.naturalHeight || img.height;
     const f = Math.min(1, Math.sqrt(GRIFO_MAX_PONTOS / (w0 * h0)));
     const w = Math.max(1, Math.round(w0 * f)), h = Math.max(1, Math.round(h0 * f));
@@ -2191,11 +2205,12 @@ const LeituraAcordo = (function () {
     ctx.drawImage(img, 0, 0, w, h);
     const p = ctx.getImageData(0, 0, w, h).data;
     const N = w * h;
-    const m = new Uint8Array(N), cor = new Uint8Array(N);
-    let nCor = 0;
+    const m = new Uint8Array(N), cor = new Uint8Array(N), vivo = new Uint8Array(N);
+    let nCor = 0, nVivo = 0;
     for (let i = 0, j = 0; j < N; i += 4, j++) {
       const r = p[i], g = p[i + 1], b = p[i + 2];
       const mx = r > g ? (r > b ? r : b) : (g > b ? g : b), mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
+      if (mx - mn >= 80 && mx >= 160) { vivo[j] = 1; nVivo++; }   // cor viva e clara (marca-texto)
       if (mn >= 200 && mx - mn < 40) continue;                    // papel
       m[j] = 1;
       if (mx - mn >= 60 || r * 77 + g * 150 + b * 29 < 80 * 256) { cor[j] = 1; nCor++; }   // bem colorido ou bem escuro
@@ -2206,25 +2221,32 @@ const LeituraAcordo = (function () {
       return function (x0, y0, x1, y1) {
         if (caixas.length >= 400) return;
         const X0 = x0 / f, Y0 = y0 / f, X1 = (x1 + 1) / f, Y1 = (y1 + 1) / f;
-        // a mesma caixa achada de novo (passada B com outro raio) não entra duas vezes
+        // a mesma caixa achada de novo (outra passada) não entra duas vezes; a pequena dentro de uma grande entra
+        // (marca-texto dentro da página de tema escuro)
         if (caixas.some(function (o) {
           const ix = Math.min(o.x1, X1) - Math.max(o.x0, X0), iy = Math.min(o.y1, Y1) - Math.max(o.y0, Y0);
-          return ix > 0 && iy > 0 && ix * iy > 0.5 * Math.min((o.x1 - o.x0) * (o.y1 - o.y0), (X1 - X0) * (Y1 - Y0));
+          return ix > 0 && iy > 0 && ix * iy > 0.5 * Math.max((o.x1 - o.x0) * (o.y1 - o.y0), (X1 - X0) * (Y1 - Y0));
         })) return;
         const g = grifoDaCaixa(p, w, x0, y0, x1, y1);
         if (!g || g.clara !== clara) return;
         const b = esticar(p, w, h, { x0: x0, y0: y0, x1: x1, y1: y1 }, g.cor);
-        caixas.push({ x0: b.x0 / f, y0: b.y0 / f, x1: (b.x1 + 1) / f, y1: (b.y1 + 1) / f, cor: g.cor, tinta: g.tinta, clara: clara });
+        caixas.push({ x0: b.x0 / f, y0: b.y0 / f, x1: (b.x1 + 1) / f, y1: (b.y1 + 1) / f, cor: g.cor, tinta: g.tinta, clara: clara, fundoClaro: Boolean(g.fundoClaro) });
       };
     };
     const cheio = morfo(morfo(m, w, h, rA, false), w, h, rA, true);
     componentes(cheio, w, h, guarda(false));
     if (nCor > N * 0.002) {
-      [1, 2].forEach(function (rB) {
+      for (const rB of [1, 2]) {
+        await pausa();
         // fechar (dilata rB, erode rB) e abrir (erode rA, dilata rA): as duas erosões seguidas viram uma só, de rB + rA
         const cB = morfo(morfo(morfo(cor, w, h, rB, true), w, h, rB + rA, false), w, h, rA, true);
         componentes(cB, w, h, guarda(true));
-      });
+      }
+    }
+    if (nVivo > N * 0.0005) {
+      await pausa();
+      const cC = morfo(morfo(morfo(vivo, w, h, 2, true), w, h, 2 + rA, false), w, h, rA, true);
+      componentes(cC, w, h, guarda(false));
     }
     return { caixas: caixas, cheio: cheio, f: f, w: w, h: h };
   }
@@ -2234,85 +2256,109 @@ const LeituraAcordo = (function () {
   // marcados). A margem evita erro de leitura em letra encostada ou cortada na borda do print.
   // Build 44: letra colorida clara (laranja, verde-claro) fica escura e os grifos (acharGrifos) viram letra preta no
   // branco. Devolve o canvas com a escala (esc) e a margem (margem) usadas, para achar as linhas no print original.
-  function preparar(img, ampliar, grifos) {
+  // Build 46: trabalha em faixas de ~1 milhão de pontos e deixa a tela respirar entre elas (print grande travava a tela).
+  const FAIXA_PONTOS = 1 << 20;
+  async function preparar(img, ampliar, grifos) {
     const w0 = img.naturalWidth || img.width, h0 = img.naturalHeight || img.height;
     const esc = Math.max(1, Math.min(ampliar, Math.sqrt(TETO_PIXELS / (w0 * h0))));
     const c = document.createElement('canvas');
     c.width = Math.max(1, Math.round(w0 * esc));
     c.height = Math.max(1, Math.round(h0 * esc));
+    const W = c.width, H = c.height;
     const ctx = c.getContext('2d', { willReadFrequently: true });
     ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.fillRect(0, 0, W, H);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(img, 0, 0, c.width, c.height);
-    const W = c.width;
-    const d = ctx.getImageData(0, 0, W, c.height), p = d.data, n = p.length;
+    ctx.drawImage(img, 0, 0, W, H);
+    // tema escuro (letra clara em fundo escuro): pela média do brilho numa cópia pequena do print; aí inverte
+    const am = document.createElement('canvas');
+    am.width = 64;
+    am.height = 64;
+    const actx = am.getContext('2d', { willReadFrequently: true });
+    actx.fillStyle = '#fff';
+    actx.fillRect(0, 0, 64, 64);
+    actx.imageSmoothingEnabled = true;
+    actx.imageSmoothingQuality = 'high';
+    actx.drawImage(img, 0, 0, 64, 64);
+    const ap = actx.getImageData(0, 0, 64, 64).data;
     let soma = 0;
-    for (let i = 0; i < n; i += 4) soma += lumDe(p[i], p[i + 1], p[i + 2]);
-    const escuro = soma / (n / 4) < 110;        // tema escuro (letra clara em fundo escuro): inverte
+    for (let i = 0; i < ap.length; i += 4) soma += lumDe(ap[i], ap[i + 1], ap[i + 2]);
+    const escuro = soma / (ap.length / 4) < 110;
     const cheio = grifos && grifos.cheio, gf = grifos ? grifos.f / esc : 0, gw = grifos ? grifos.w : 0, gh = grifos ? grifos.h : 0;
-    for (let i = 0; i < n; i += 4) {
-      const r = p[i], g = p[i + 1], b = p[i + 2];
-      const lum = lumDe(r, g, b);
-      let y = escuro ? 255 - lum : lum;
-      y = ((y - 60) * 255 / 130) | 0;
-      y = y < 0 ? 0 : (y > 255 ? 255 : y);
-      if (!escuro && lum < 210) {
-        // letra colorida clara (laranja, verde-claro...) fica escura. Em área pintada (marca-texto colorido, mesmo o que
-        // não virou caixa de grifo, como o rosa num JPEG) é o contrário: o fundo vivo clareia e a letra preta fica (a
-        // letra preta "manchada" de cor pelo JPEG não é viva: o canal mais forte dela fica baixo).
-        const mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
-        const sat = mx - (r < g ? (r < b ? r : b) : (g < b ? g : b));
-        if (sat > 80) {
-          let pintado = false;
-          if (cheio) {
-            const k = i >> 2, px = k % W, py = (k - px) / W;
-            const gx = Math.min(gw - 1, (px * gf) | 0), gy = Math.min(gh - 1, (py * gf) | 0);
-            pintado = cheio[gy * gw + gx] === 1;
-          }
-          if (!pintado) { const t = 255 - ((sat * 13 / 10) | 0); if (t < y) y = t < 0 ? 0 : t; }
-          else if (mx >= 160 && lum >= 60) y = 255 - ((255 - y) >> 2);
-        }
-      }
-      p[i] = p[i + 1] = p[i + 2] = y;
-      p[i + 3] = 255;
-    }
     // grifos: dentro de cada caixa, letra preta no branco pelo brilho entre o fundo da caixa (= branco) e a cor da
     // letra (= preto); o brilho é o que o JPEG guarda melhor (a cor ele borra perto da letra). Caixa de letra escura
     // pega também 2 pontos de beirada (o borrão do JPEG); na de letra clara, a beirada de 1 ponto fica branca.
-    ((grifos && grifos.caixas) || []).forEach(function (cx) {
+    // Caixa grande primeiro: a pequena dentro dela (marca-texto numa página escura) vale por cima.
+    const caixas = ((grifos && grifos.caixas) || []).filter(function (cx) { return escuro || !cx.fundoClaro; }).map(function (cx) {
       const fora = cx.clara ? 0 : 2;
-      const sx0 = Math.max(0, Math.floor((cx.x0 - fora) * esc)), sy0 = Math.max(0, Math.floor((cx.y0 - fora) * esc));
-      const sx1 = Math.min(W, Math.ceil((cx.x1 + fora) * esc)), sy1 = Math.min(c.height, Math.ceil((cx.y1 + fora) * esc));
-      const bw = sx1 - sx0, bh = sy1 - sy0;
-      if (bw <= 0 || bh <= 0) return;
-      const q = ctx.getImageData(sx0, sy0, bw, bh).data;   // cores originais (o canvas ainda não recebeu o tratamento)
       const lf = lumDe(cx.cor[0], cx.cor[1], cx.cor[2]), lt = lumDe(cx.tinta[0], cx.tinta[1], cx.tinta[2]);
-      const vao = Math.max(30, Math.abs(lf - lt));
-      const beira = cx.clara ? Math.max(1, Math.round(esc)) : 0;
-      for (let yy = 0; yy < bh; yy++) {
-        for (let xx = 0; xx < bw; xx++) {
-          const k = (yy * bw + xx) * 4;
-          let v = 255;
-          if (xx >= beira && yy >= beira && xx < bw - beira && yy < bh - beira) {
-            const lp = lumDe(q[k], q[k + 1], q[k + 2]);
-            v = cx.clara ? 255 - (lp - lf) * 255 / vao : (lp - lt) * 255 / vao;
-            v = ((v - 60) * 255 / 130) | 0;              // estica como no resto do print
-            v = v < 0 ? 0 : (v > 255 ? 255 : v);
+      return { clara: cx.clara, cor: cx.cor, lf: lf, lt: lt, vao: Math.max(30, Math.abs(lf - lt)), beira: cx.clara ? Math.max(1, Math.round(esc)) : 0,
+        x0: Math.max(0, Math.floor((cx.x0 - fora) * esc)), y0: Math.max(0, Math.floor((cx.y0 - fora) * esc)),
+        x1: Math.min(W, Math.ceil((cx.x1 + fora) * esc)), y1: Math.min(H, Math.ceil((cx.y1 + fora) * esc)),
+        cx0: Math.floor(cx.x0 * esc), cy0: Math.floor(cx.y0 * esc), cx1: Math.ceil(cx.x1 * esc), cy1: Math.ceil(cx.y1 * esc) };
+    }).filter(function (b) { return b.x1 > b.x0 && b.y1 > b.y0; })
+      .sort(function (a, b) { return (b.x1 - b.x0) * (b.y1 - b.y0) - (a.x1 - a.x0) * (a.y1 - a.y0); });
+    const passo = Math.max(16, Math.floor(FAIXA_PONTOS / W));
+    for (let y0 = 0; y0 < H; y0 += passo) {
+      const hh = Math.min(passo, H - y0);
+      const d = ctx.getImageData(0, y0, W, hh), p = d.data, n = p.length;
+      const dentro = caixas.filter(function (b) { return b.y0 < y0 + hh && b.y1 > y0; });
+      const q = dentro.length ? new Uint8ClampedArray(p) : null;   // cores originais desta faixa (para os grifos)
+      for (let i = 0; i < n; i += 4) {
+        const r = p[i], g = p[i + 1], b = p[i + 2];
+        const lum = lumDe(r, g, b);
+        let y = escuro ? 255 - lum : lum;
+        y = ((y - 60) * 255 / 130) | 0;
+        y = y < 0 ? 0 : (y > 255 ? 255 : y);
+        if (!escuro && lum < 210) {
+          // letra colorida clara (laranja, verde-claro...) fica escura. Em área pintada (marca-texto colorido, mesmo o que
+          // não virou caixa de grifo, como o rosa num JPEG) é o contrário: o fundo vivo clareia e a letra preta fica (a
+          // letra preta "manchada" de cor pelo JPEG não é viva: o canal mais forte dela fica baixo).
+          const mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
+          const sat = mx - (r < g ? (r < b ? r : b) : (g < b ? g : b));
+          if (sat > 80) {
+            let pintado = false;
+            if (cheio) {
+              const k = i >> 2, px = k % W, py = y0 + (k - px) / W;
+              const gx = Math.min(gw - 1, (px * gf) | 0), gy = Math.min(gh - 1, (py * gf) | 0);
+              pintado = cheio[gy * gw + gx] === 1;
+            }
+            if (!pintado) { const t = 255 - ((sat * 13 / 10) | 0); if (t < y) y = t < 0 ? 0 : t; }
+            else if (mx >= 160 && lum >= 60) y = 255 - ((255 - y) >> 2);
           }
-          const i = ((sy0 + yy) * W + sx0 + xx) * 4;
-          p[i] = p[i + 1] = p[i + 2] = v;
         }
+        p[i] = p[i + 1] = p[i + 2] = y;
+        p[i + 3] = 255;
       }
-    });
-    ctx.putImageData(d, 0, 0);
+      dentro.forEach(function (b) {
+        const ya = Math.max(b.y0, y0), yb = Math.min(b.y1, y0 + hh);
+        for (let yy = ya; yy < yb; yy++) {
+          for (let xx = b.x0; xx < b.x1; xx++) {
+            const k = ((yy - y0) * W + xx) * 4;
+            // beirada de fora da caixa de letra escura: só o que ainda é da cor da caixa (borrão do JPEG); o resto (o
+            // papel, ou o fundo escuro da página no tema escuro) fica como o resto do print
+            if ((xx < b.cx0 || yy < b.cy0 || xx >= b.cx1 || yy >= b.cy1) && distCor(q[k], q[k + 1], q[k + 2], b.cor) > 80) continue;
+            let v = 255;
+            if (xx >= b.x0 + b.beira && yy >= b.y0 + b.beira && xx < b.x1 - b.beira && yy < b.y1 - b.beira) {
+              const lp = lumDe(q[k], q[k + 1], q[k + 2]);
+              v = b.clara ? 255 - (lp - b.lf) * 255 / b.vao : (lp - b.lt) * 255 / b.vao;
+              v = ((v - 60) * 255 / 130) | 0;            // estica como no resto do print
+              v = v < 0 ? 0 : (v > 255 ? 255 : v);
+            }
+            p[k] = p[k + 1] = p[k + 2] = v;
+          }
+        }
+      });
+      ctx.putImageData(d, 0, y0);
+      if (y0 + hh < H) await pausa();
+    }
     // margem branca em volta: letra encostada ou cortada na borda do print era lida errado (num print real, o
     // "Nº 41016" do assunto, cortado no alto, saía "410716"; com a margem sai certo)
     const m = Math.round(12 * esc);
     const c2 = document.createElement('canvas');
-    c2.width = c.width + 2 * m;
-    c2.height = c.height + 2 * m;
+    c2.width = W + 2 * m;
+    c2.height = H + 2 * m;
     const ctx2 = c2.getContext('2d');
     ctx2.fillStyle = '#fff';
     ctx2.fillRect(0, 0, c2.width, c2.height);
@@ -2321,8 +2367,8 @@ const LeituraAcordo = (function () {
     c2.margem = m;
     return c2;
   }
-  function grifosDe(img) {
-    try { return acharGrifos(img); } catch (e) { return null; }   // sem os grifos a leitura segue como antes
+  async function grifosDe(img) {
+    try { return await acharGrifos(img); } catch (e) { return null; }   // sem os grifos a leitura segue como antes
   }
   function juntar(a, b) {
     const out = { sim: {}, nao: {}, misto: {}, encontrados: {} };
@@ -2363,10 +2409,10 @@ const LeituraAcordo = (function () {
   async function lerUm(arquivo) {
     const img = await abrirImagem(arquivo.original || arquivo.dataUrl);
     const w = await pegarMotor();
-    const grifos = grifosDe(img);
+    const grifos = await grifosDe(img);
     // 1ª passada: imagem ampliada, texto lido linha a linha de cima para baixo (o print normal: só o e-mail)
-    await w.setParameters({ tessedit_pageseg_mode: '6', user_defined_dpi: '0' });
-    const prep = preparar(img, 2, grifos);
+    await comPrazo(vigiado(w.setParameters({ tessedit_pageseg_mode: '6', user_defined_dpi: '0' })), 30000, 'o leitor de prints não respondeu');
+    const prep = await preparar(img, 2, grifos);
     const r1 = (await comPrazo(vigiado(w.recognize(prep, {}, { text: true, tsv: true })), 150000, 'a leitura do print demorou demais')).data;
     let texto = String(r1.text || '');
     let linhas = [];
@@ -2374,8 +2420,9 @@ const LeituraAcordo = (function () {
     let leitura = analisar(texto);
     if (Object.keys(leitura.sim).length === 0 && Object.keys(leitura.nao).length === 0 && Object.keys(leitura.misto).length === 0) {
       // nada lido: 2ª passada com a divisão automática da página (print da janela inteira, com várias colunas)
-      await w.setParameters({ tessedit_pageseg_mode: '3', user_defined_dpi: '96' });
-      const texto2 = String((await comPrazo(vigiado(w.recognize(preparar(img, 1, grifos))), 150000, 'a leitura do print demorou demais')).data.text || '');
+      await comPrazo(vigiado(w.setParameters({ tessedit_pageseg_mode: '3', user_defined_dpi: '96' })), 30000, 'o leitor de prints não respondeu');
+      const prep2 = await preparar(img, 1, grifos);
+      const texto2 = String((await comPrazo(vigiado(w.recognize(prep2)), 150000, 'a leitura do print demorou demais')).data.text || '');
       leitura = juntar(leitura, analisar(texto2));
       texto += '\n-----\n' + texto2;
     }
@@ -2390,7 +2437,7 @@ const LeituraAcordo = (function () {
     const img = await abrirImagem(arquivo.original || arquivo.dataUrl);
     const w0 = img.naturalWidth || img.width, h0 = img.naturalHeight || img.height;
     const w = await pegarMotor();
-    await w.setParameters({ tessedit_pageseg_mode: '7', user_defined_dpi: '0' });
+    await comPrazo(vigiado(w.setParameters({ tessedit_pageseg_mode: '7', user_defined_dpi: '0' })), 30000, 'o leitor de prints não respondeu');
     for (let k = 0; k < linhas.length; k++) {
       const L = linhas[k];
       const alt = Math.max(4, L.y1 - L.y0);
@@ -2404,10 +2451,11 @@ const LeituraAcordo = (function () {
       g.fillStyle = '#fff';
       g.fillRect(0, 0, cv.width, cv.height);
       g.drawImage(img, x0, y0, cv.width, cv.height, 0, 0, cv.width, cv.height);
-      const gr = grifosDe(cv);
+      const gr = await grifosDe(cv);
       for (let a = 0; a < 2; a++) {
         const fator = Math.max(2, Math.min(9, (a === 0 ? 64 : 96) / alt));
-        const t = (await comPrazo(vigiado(w.recognize(preparar(cv, fator, gr))), 60000, 'a leitura do print demorou demais')).data.text;
+        const prepL = await preparar(cv, fator, gr);
+        const t = (await comPrazo(vigiado(w.recognize(prepL)), 60000, 'a leitura do print demorou demais')).data.text;
         texto += String(t || '').trim() + '\n';
       }
     }
@@ -2460,7 +2508,7 @@ const LeituraAcordo = (function () {
         }, function (e) {
           out.falhas++;
           out.motivo = String((e && e.message) || e || 'erro na leitura').slice(0, 140);
-          if (/demorou demais|leitor de prints parou/.test(out.motivo)) largarMotor();          // leitor travado: recomeça do zero na próxima
+          if (/demorou demais|leitor de prints parou|não respondeu/.test(out.motivo)) largarMotor();   // leitor travado: recomeça do zero na próxima
         });
       });
     });
@@ -3485,13 +3533,17 @@ function SkillSwapTool() {
         if (!popup) return null;
         const E = React.createElement;
         const ok = popup.tipo === 'approved';
+        // build 46: na validação aprovada, o OK já baixa o(s) template(s), igual ao botão "Baixar template" (que continua no
+        // painel). Fechar clicando fora do quadro só fecha: o download fica para o botão.
+        const baixaNoOk = ok && canDownload;
+        const fecharOk = () => { setPopup(null); if (baixaNoOk) handleDownload(); };
         return E("div", { className: "ct-modal-bg", onClick: () => setPopup(null) },
             E("div", { className: "ct-modal", onClick: (e) => e.stopPropagation(), role: "dialog" },
                 E("div", { className: "ct-modal-ico", style: { backgroundColor: ok ? BRAND.successBg : BRAND.errorBg, color: ok ? BRAND.success : BRAND.errorText } }, ok ? '\u2713' : '\u2715'),
                 E("p", { className: "text-base font-bold mt-3", style: { color: BRAND.dark } }, ok ? 'Solicitação validada' : 'Solicitação reprovada'),
-                E("p", { className: "text-sm mt-1", style: { color: '#4E5662' } }, (ok ? 'Validado por ' : 'Reprovado por ') + (popup.nome || '—') + (ok ? (valParts > 1 ? '. O download dos ' + valParts + ' templates foi liberado.' : '. O download do template foi liberado.') : (VALIDATION_REQUIRED ? '. O download continua bloqueado.' : '. Ajuste a solicitação antes de usar o template.'))),
+                E("p", { className: "text-sm mt-1", style: { color: '#4E5662' } }, (ok ? 'Validado por ' : 'Reprovado por ') + (popup.nome || '—') + (ok ? (baixaNoOk ? (valParts > 1 ? '. Clique em OK para baixar os ' + valParts + ' templates.' : '. Clique em OK para baixar o template.') : (valParts > 1 ? '. O download dos ' + valParts + ' templates foi liberado.' : '. O download do template foi liberado.')) : (VALIDATION_REQUIRED ? '. O download continua bloqueado.' : '. Ajuste a solicitação antes de usar o template.'))),
                 (!ok && popup.motivo) ? E("div", { className: "text-sm mt-3 text-left rounded-lg p-3", style: { backgroundColor: BRAND.errorBg, border: '1px solid ' + BRAND.errorBorder, color: BRAND.errorText, whiteSpace: 'pre-wrap', wordBreak: 'break-word' } }, E("p", { className: "text-xs font-semibold uppercase tracking-wide mb-1" }, 'Onde errou'), popup.motivo) : null,
-                E("button", { onClick: () => setPopup(null), className: "ct-btn-primary text-white px-5 py-2 rounded-lg text-sm font-semibold mt-4" }, 'OK')));
+                E("button", { onClick: fecharOk, className: "ct-btn-primary ct-modal-ok text-white px-5 py-2 rounded-lg text-sm font-semibold mt-4" }, 'OK')));
     }
     // "F5" do Comentário para baixo: limpa tudo menos a matriz carregada (passo 1)
     const resetRequest = () => {
