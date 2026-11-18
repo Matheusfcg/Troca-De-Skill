@@ -235,7 +235,9 @@ select.ct-input{-webkit-appearance:none;appearance:none;background-image:url("da
   .ct-panel-h,.ct-panel-b{padding-left:16px;padding-right:16px}
   .ct-stat{padding-left:16px}
 }
-/* build 42: caixinha "Novatos (sem campanha de origem)" */
+/* build 42: caixinha "Novatos (sem campanha de origem)"; build 47: "Repasse" ao lado, com a mesma regra */
+.ct-check-row{display:flex;flex-wrap:wrap;align-items:center;column-gap:18px;row-gap:6px}
+.ct-check-dica{font-size:12px;line-height:18px;color:var(--ink-4)}
 .ct-check{display:inline-flex;align-items:center;gap:8px;font-size:13px;line-height:18px;color:var(--ink-2);cursor:pointer;-webkit-user-select:none;user-select:none}
 .ct-check input{width:16px;height:16px;margin:0;accent-color:var(--claro);cursor:pointer;flex-shrink:0}
 /* build 43: pedido aguardando validação guardado no navegador (Retomar / Descartar) */
@@ -393,7 +395,7 @@ const BRAND = {
 // no rodapé só pra dar pra conferir rapidinho, num piscar de olhos, se
 // duas cópias do arquivo (por exemplo um download antigo x um novo) são
 // a mesma versão ou não, sem precisar comparar comportamento na mão.
-const BUILD_VERSION = 'build 46';
+const BUILD_VERSION = 'build 47';
 // Validação em grupo do Teams (Google Apps Script). Cole aqui a URL do Web App
 // que termina em /exec (NÃO a que termina em /dev, essa só abre pra quem edita).
 // Implantação do Apps Script usada pela ferramenta E pelos links do Teams (a mesma URL fica em URL_APP_ no .gs).
@@ -666,7 +668,8 @@ function applyKnownExclusions(rawCampaigns) {
 // inteiro mais abaixo, então nenhum caso atual precisa desse rótulo)
 const DISPLAY_NAME_OVERRIDES = [];
 // Campanhas pedidas pelo time que precisam existir mesmo se a planilha carregada não trouxer o bloco
-// (só entram se ainda não existir uma campanha com esse nome nessa aba). Dados conferidos na matriz AEC (aba CONTROLE MOVEL, I1:K15).
+// (só entram se ainda não existir uma campanha com esse nome nessa aba). Dados conferidos na matriz AEC V179 (aba CONTROLE
+// MOVEL, U1:W16). Build 47: só entram na matriz que TEM essa aba (antes a PRÉ PAGO da AEC aparecia também na ALM e na TEL).
 const MANUAL_CAMPAIGNS = [
   { name: 'PRÉ PAGO', sheetName: 'CONTROLE MOVEL', skills: [
     { skill: '23128429', nome: 'AEC.PRE.PA', pri: '-' },
@@ -683,6 +686,7 @@ const MANUAL_CAMPAIGNS = [
     { skill: '13862700', nome: 'AEC.N1.ATD.TEC.PRE', pri: '2' },
     { skill: '13862264', nome: 'AEC.TEC.PRE', pri: '1' },
     { skill: '13869732', nome: 'AEC.ECOMM.N1.PRE', pri: '1' },
+    { skill: '23128443', nome: 'AEC.N1.PRE.PRIO', pri: '1' },
   ] },
 ];
 function applyDisplayNameOverrides(sheetName, rawCampaigns, rawOrder, rawCollapsedCounts, rawKeptBothSkills, rawBlocks) {
@@ -806,23 +810,32 @@ function readSheetRows(XLSXlib, sheet) {
   }
 }
 
+// Abas ocultas no Excel (build 47): a matriz oficial esconde as versões antigas (ex.: "TEL - PME MÓVEL ANTIGO",
+// "TEL - EMPRESA RESIDENCIAL_ANTES", "CONTROLE_PRE_FCR", "AEC RESIDENCIAL RET" na AEC V179 e na TEL V49). Elas não
+// entram, como já acontecia com linha e coluna oculta (senão a mesma campanha aparecia duas vezes, uma delas antiga).
+function abasOcultas(wb) {
+  const lista = (wb && wb.Workbook && wb.Workbook.Sheets) || [];
+  return lista.map((x, i) => (x && x.Hidden ? (x.name || (wb.SheetNames || [])[i]) : null)).filter(Boolean);
+}
 // Núcleo da leitura da planilha, separado da tela pra poder ser testado de
-// verdade. getSheetRows(nomeDaAba) devolve { rows, anchored }.
-function buildMatrixFromWorkbook(sheetNames, getSheetRows) {
+// verdade. getSheetRows(nomeDaAba) devolve { rows, anchored }; ocultas = nomes das abas ocultas (abasOcultas).
+function buildMatrixFromWorkbook(sheetNames, getSheetRows, ocultas) {
   const campaigns = {};
   const order = [];
   const summaries = [];
   let totalExcluded = 0;
   let hiddenSheetCount = 0;
+  const abasLidas = [];   // abas que entraram na leitura (build 47: as campanhas de reserva só entram se a aba delas estiver aqui)
 
   for (const sheetName of sheetNames) {
     // abas descontinuadas (nome com "OLD", ou substituídas por uma
     // versão com outro nome, tipo "... - NOVA") não entram em nada —
     // nem leitura, nem busca, nem painel de blocos
-    if (/OLD/i.test(sheetName) || HIDDEN_SHEET_NAMES.includes(sheetName)) {
+    if (/OLD/i.test(sheetName) || HIDDEN_SHEET_NAMES.includes(sheetName) || (ocultas || []).includes(sheetName)) {
       hiddenSheetCount += 1;
       continue;
     }
+    abasLidas.push(sheetName);
     const { rows: sheetRows, anchored } = getSheetRows(sheetName);
     const parsed = parseMatrix(sheetRows);
     if (!anchored) {
@@ -890,6 +903,7 @@ function buildMatrixFromWorkbook(sheetNames, getSheetRows) {
   }
 
   for (const mc of MANUAL_CAMPAIGNS) {
+    if (!abasLidas.includes(mc.sheetName)) continue;   // a matriz carregada não tem essa aba (ALM, TEL...) ou ela está oculta
     if (order.some((o) => o.sheetName === mc.sheetName && normalize(o.name) === normalize(mc.name))) continue;
     const key = campaignKey(mc.sheetName, mc.name);
     campaigns[key] = mc.skills.map((s) => ({ skill: s.skill, prof: s.pri === '-' || s.pri === '' ? '3' : s.pri }));
@@ -945,7 +959,7 @@ async function lerMatrizNaPagina(buf) {
   const X = await xlsxPronto();
   const wb = X.read(buf, { type: 'array', cellStyles: true });
   // toda a lógica de leitura fica em buildMatrixFromWorkbook (testável sem a tela)
-  return buildMatrixFromWorkbook(wb.SheetNames, (sheetName) => readSheetRows(X, wb.Sheets[sheetName]));
+  return buildMatrixFromWorkbook(wb.SheetNames, (sheetName) => readSheetRows(X, wb.Sheets[sheetName]), abasOcultas(wb));
 }
 function lerMatrizSemTravar(buf) {
   const naPagina = () => lerMatrizNaPagina(buf);
@@ -953,7 +967,7 @@ function lerMatrizSemTravar(buf) {
   try {
     if (typeof Worker === 'undefined' || typeof Blob === 'undefined' || typeof URL === 'undefined' || !URL.createObjectURL) return Promise.resolve().then(naPagina);
     const funcoes = [looksLikeSkillCode, parseMatrix, normalize, campaignKey, isKnownBadEntry, applyKnownExclusions,
-      applyDisplayNameOverrides, applyHiddenCellsFilter, readSheetRows, buildMatrixFromWorkbook].map((f) => f.toString()).join('\n');
+      applyDisplayNameOverrides, applyHiddenCellsFilter, readSheetRows, abasOcultas, buildMatrixFromWorkbook].map((f) => f.toString()).join('\n');
     const constantes = 'const KNOWN_BAD_ENTRIES = ' + JSON.stringify(KNOWN_BAD_ENTRIES) + ';\n' +
       'const DISPLAY_NAME_OVERRIDES = ' + JSON.stringify(DISPLAY_NAME_OVERRIDES) + ';\n' +
       'const MANUAL_CAMPAIGNS = ' + JSON.stringify(MANUAL_CAMPAIGNS) + ';\n' +
@@ -963,7 +977,7 @@ function lerMatrizSemTravar(buf) {
       'onmessage = function (e) {\n' +
       '  try {\n' +
       '    var wb = XLSX.read(e.data, { type: "array", cellStyles: true });\n' +
-      '    postMessage({ ok: true, r: buildMatrixFromWorkbook(wb.SheetNames, function (n) { return readSheetRows(XLSX, wb.Sheets[n]); }) });\n' +
+      '    postMessage({ ok: true, r: buildMatrixFromWorkbook(wb.SheetNames, function (n) { return readSheetRows(XLSX, wb.Sheets[n]); }, abasOcultas(wb)) });\n' +
       '  } catch (err) { postMessage({ ok: false, erro: String((err && err.message) || err) }); }\n' +
       '};\n';
     url = URL.createObjectURL(new Blob([codigo], { type: 'text/javascript' }));
@@ -2624,6 +2638,8 @@ function SkillSwapTool() {
     // campanha de origem (de onde os logins saem): origem S2S também exige o print do "de acordo"; em branco só para novatos
     const [origemQuery, setOrigemQuery] = useState('');
     const [origemNovatos, setOrigemNovatos] = useState(false);
+    // build 47: "Repasse" segue a mesma regra do "Novatos" (sem campanha de origem); só um dos dois fica marcado
+    const [origemRepasse, setOrigemRepasse] = useState(false);
     const [showOrigemSug, setShowOrigemSug] = useState(false);
     const [showBlocks, setShowBlocks] = useState(false);
     const [downloaded, setDownloaded] = useState(false);
@@ -2707,7 +2723,7 @@ function SkillSwapTool() {
         setValParts(1);
         setValProg('');
         setAcordoInfo(null);
-    }, [campaign, loginsRaw, solicitante, approvalFiles, comment, otherOn, otherName, otherSkillsRaw, numero, origemQuery, origemNovatos]);
+    }, [campaign, loginsRaw, solicitante, approvalFiles, comment, otherOn, otherName, otherSkillsRaw, numero, origemQuery, origemNovatos, origemRepasse]);
     // a trava do "Retomar" vale só para a renderização em que os campos foram preenchidos
     useEffect(() => { pularReset.current = false; });
     useEffect(() => {
@@ -2800,9 +2816,12 @@ function SkillSwapTool() {
 
     // S2S: só libera pedir validação / baixar com os prints do "de acordo" anexados (1 na matriz TEL, 2 nas demais)
     const origemTxt = origemQuery.trim();
-    const origemS2S = !otherOn && !origemNovatos && isS2S(origemTxt);
-    // origem obrigatória (em "outra matriz" não se aplica); em branco só com "Novatos"
-    const origemOk = otherOn || origemNovatos || origemTxt.length >= 3;
+    // sem campanha de origem: "Novatos" ou "Repasse" (build 47)
+    const origemSem = origemNovatos || origemRepasse;
+    const ORIGEM_REPASSE_TXT = 'Repasse (sem campanha de origem)';
+    const origemS2S = !otherOn && !origemSem && isS2S(origemTxt);
+    // origem obrigatória (em "outra matriz" não se aplica); em branco só com "Novatos" ou "Repasse"
+    const origemOk = otherOn || origemSem || origemTxt.length >= 3;
     const isS2SDestino = Boolean(selectedCampaign && isS2S(selectedCampaign.name));
     // a regra do S2S (prints do "de acordo" + leitura) vale quando o destino OU a origem é S2S
     const isS2SCampaign = isS2SDestino || origemS2S;
@@ -2885,14 +2904,14 @@ function SkillSwapTool() {
         return campaignOrder.map((o, i) => ({ o, i, r: rank(o) })).filter((x) => normalize(x.o.name).includes(q)).sort((a, b) => a.r - b.r || a.i - b.i).slice(0, 8).map((x) => x.o);
     }, [campaignQuery, campaignOrder]);
     const origemSugestoes = useMemo(() => {
-        if (!origemTxt || origemNovatos) return [];
+        if (!origemTxt || origemSem) return [];
         const q = normalize(origemTxt);
         const rank = (o) => { const n = normalize(o.name); return n === q ? 0 : n.startsWith(q) ? 1 : 2; };
         const vistos = {};
         return campaignOrder.map((o, i) => ({ o, i, r: rank(o) })).filter((x) => normalize(x.o.name).includes(q)).sort((a, b) => a.r - b.r || a.i - b.i)
             .filter((x) => { const k = normalize(x.o.name); if (vistos[k]) return false; vistos[k] = true; return true; })
             .slice(0, 8).map((x) => x.o);
-    }, [origemTxt, origemNovatos, campaignOrder]);
+    }, [origemTxt, origemSem, campaignOrder]);
     const rows = useMemo(() => {
         // pareamento por posição: login[i] com a i-ésima skill da campanha —
         // confirmado com um template real já usado (login só nas primeiras N
@@ -3122,6 +3141,7 @@ function SkillSwapTool() {
         setShowSuggestions(false);
         setOrigemQuery(p.origemQuery || '');
         setOrigemNovatos(Boolean(p.origemNovatos));
+        setOrigemRepasse(Boolean(p.origemRepasse) && !p.origemNovatos);
         setShowOrigemSug(false);
         setLoginsRaw(p.loginsRaw || '');
         setLoginsFile(null);
@@ -3349,7 +3369,7 @@ function SkillSwapTool() {
                     parte: chunks.length > 1 ? (k + 1) + '/' + chunks.length : '',
                     totalLogins: logins.length,
                     outraMatriz: otherOn ? otherTrim : '',
-                    origem: (otherOn || origemNovatos) ? '' : origemTxt,
+                    origem: (otherOn || origemNovatos) ? '' : (origemRepasse ? ORIGEM_REPASSE_TXT : origemTxt),
                     origemNovatos: !otherOn && origemNovatos,
                     acordo: acordoEnvio,
                     anexos: (otherOn ? [] : approvalFiles).map((f) => ({ name: f.kind === 'img' ? f.name.replace(/\.[^.\/\\]*$/, '') + '.jpg' : f.name, kind: f.kind, dataUrl: f.dataUrl })),
@@ -3377,7 +3397,7 @@ function SkillSwapTool() {
             setValState('pending');
             guardarPendente({ v: 1, ids: ids.join(','), parts: chunks.length, enviadoEm: Date.now(), numero, solicitante, loginsRaw, comment,
                 otherOn, otherName, otherSkillsRaw, campaign, campaignQuery, campNome: selectedCampaign ? selectedCampaign.name : '',
-                aba: selectedCampaign ? selectedCampaign.sheetName : '', origemQuery, origemNovatos, arquivo: meta ? meta.fileName : '',
+                aba: selectedCampaign ? selectedCampaign.sheetName : '', origemQuery, origemNovatos, origemRepasse, arquivo: meta ? meta.fileName : '',
                 nLogins: logins.length, impressao: impressaoTemplate(logins, campaignSkills),
                 acordoInfo: acordoEnvio ? { resumo: acordoRes.resumo, atencao: Boolean(acordoRes.atencao) } : null });
             setPendentes(lerPendentes());
@@ -3507,7 +3527,7 @@ function SkillSwapTool() {
         else if (otherOn && !canGenerate)
             status = E("p", { className: "text-xs mt-2", style: { color: '#737B87' } }, 'Cole os logins e as skills (uma por linha) para pedir a validação.');
         else if (canGenerate && !origemOk)
-            status = E("p", { className: "text-xs mt-2", style: { color: '#8F4E00' } }, 'Informe a campanha de origem no passo 3 (ou marque “Novatos”) para pedir a validação.');
+            status = E("p", { className: "text-xs mt-2", style: { color: '#8F4E00' } }, 'Informe a campanha de origem no passo 3 (ou marque “Novatos” ou “Repasse”) para pedir a validação.');
         else if (canGenerate && !s2sOk)
             status = E("p", { className: "text-xs mt-2", style: { color: '#8F4E00' } }, s2sRotulo + ': anexe ' + (s2sMin === 1 ? 'o print' : 'os ' + s2sMin + ' prints') + ' do "de acordo" por e-mail no passo 2 (' + imgCount + '/' + s2sMin + ') para pedir a validação.');
         else if (canGenerate && !printOk)
@@ -3564,6 +3584,7 @@ function SkillSwapTool() {
         setShowSuggestions(false);
         setOrigemQuery('');
         setOrigemNovatos(false);
+        setOrigemRepasse(false);
         setShowOrigemSug(false);
         setNumero('');
         setValState('idle');
@@ -3686,8 +3707,8 @@ function SkillSwapTool() {
         else
             itens.push({ tom: 'off', t: tLC, s: logins.length === 0 ? 'Cole os logins no passo ' + passoSol : (otherOn ? 'Cole as skills no passo 2' : 'Escolha a campanha no passo 3') });
         if (!otherOn)
-            itens.push(origemOk ? { tom: 'ok', t: 'Campanha de origem', s: origemNovatos ? 'Novatos (sem campanha de origem)' : origemTxt + (origemS2S ? ' · S2S: precisa do “de acordo”' : '') }
-                : { tom: 'off', t: 'Campanha de origem', s: 'Informe no passo 3 (ou marque “Novatos”)' });
+            itens.push(origemOk ? { tom: 'ok', t: 'Campanha de origem', s: origemNovatos ? 'Novatos (sem campanha de origem)' : origemRepasse ? ORIGEM_REPASSE_TXT : origemTxt + (origemS2S ? ' · S2S: precisa do “de acordo”' : '') }
+                : { tom: 'off', t: 'Campanha de origem', s: 'Informe no passo 3 (ou marque “Novatos” ou “Repasse”)' });
         if (printObrig) {
             const precisa = isS2SCampaign ? s2sMin : 1;
             itens.push(retomadoAtivo ? { tom: 'ok', t: 'Print do “de acordo”', s: 'Enviado junto com o pedido' }
@@ -3735,7 +3756,7 @@ function SkillSwapTool() {
                         valParts > 1 ? "Baixar " + valParts + " templates (.csv)" : "Baixar template_agentes.csv"),
                     lastDownload && E("p", { className: "text-xs mt-2.5 font-medium", style: { color: BRAND.successText } }, '✓ ' + lastDownload),
                     !canGenerate && E("p", { className: "text-xs mt-2.5", style: { color: '#737B87' } }, (otherOn ? "Cole os logins e as skills primeiro." : "Carregue a matriz, cole os logins e digite a campanha primeiro.")),
-                    canGenerate && !canDownload && E("p", { className: "text-xs mt-2.5", style: { color: (origemOk && s2sOk && printOk && otherOk && acordoOk) ? '#737B87' : '#8F4E00' } }, !origemOk ? "Download bloqueado: informe a campanha de origem no passo 3 (ou marque “Novatos”)." : !s2sOk ? "Download bloqueado: " + (isS2SDestino ? "campanha S2S" : "campanha de origem S2S") + " exige " + s2sPrints(s2sMin) + " do “de acordo” no passo 2 (" + imgCount + "/" + s2sMin + ")." : !printOk ? "Download bloqueado: mais de " + LOGINS_PRINT_MIN + " logins exige pelo menos 1 print no passo 2 (" + imgCount + "/1)." : !otherOk ? "Download bloqueado: informe qual é a outra matriz (não vale ALM, TEL ou AEC)." : !acordoOk ? "Download bloqueado: veja o aviso da leitura do print no passo 2." : "O download libera quando a validação for aprovada."))));
+                    canGenerate && !canDownload && E("p", { className: "text-xs mt-2.5", style: { color: (origemOk && s2sOk && printOk && otherOk && acordoOk) ? '#737B87' : '#8F4E00' } }, !origemOk ? "Download bloqueado: informe a campanha de origem no passo 3 (ou marque “Novatos” ou “Repasse”)." : !s2sOk ? "Download bloqueado: " + (isS2SDestino ? "campanha S2S" : "campanha de origem S2S") + " exige " + s2sPrints(s2sMin) + " do “de acordo” no passo 2 (" + imgCount + "/" + s2sMin + ")." : !printOk ? "Download bloqueado: mais de " + LOGINS_PRINT_MIN + " logins exige pelo menos 1 print no passo 2 (" + imgCount + "/1)." : !otherOk ? "Download bloqueado: informe qual é a outra matriz (não vale ALM, TEL ou AEC)." : !acordoOk ? "Download bloqueado: veja o aviso da leitura do print no passo 2." : "O download libera quando a validação for aprovada."))));
     }
     return (React.createElement("div", { className: "min-h-screen", style: { backgroundColor: BRAND.page, fontFamily: "var(--font)" } },
         React.createElement("header", { className: "ct-top" },
@@ -3789,6 +3810,8 @@ function SkillSwapTool() {
                                     " aba",
                                     meta.hiddenSheetCount > 1 ? 's' : '',
                                     " descontinuada",
+                                    meta.hiddenSheetCount > 1 ? 's' : '',
+                                    " ou oculta",
                                     meta.hiddenSheetCount > 1 ? 's' : '',
                                     " ",
                                     meta.hiddenSheetCount > 1 ? 'foram ignoradas' : 'foi ignorada',
@@ -3929,13 +3952,18 @@ function SkillSwapTool() {
                                 React.createElement("label", { className: "ct-label" }, "Campanha de origem"),
                                 React.createElement("div", { className: "relative mt-1.5" },
                                     React.createElement(Search, { className: "w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none", style: { color: '#9AA1AB' }, strokeWidth: 1.75 }),
-                                    React.createElement("input", { type: "text", value: origemQuery, disabled: origemNovatos, onChange: (e) => { setOrigemQuery(e.target.value); setShowOrigemSug(true); }, onFocus: () => setShowOrigemSug(true), onBlur: () => setTimeout(() => setShowOrigemSug(false), 120), onKeyDown: (e) => { if (e.key === 'Escape' || e.key === 'Enter') setShowOrigemSug(false); }, placeholder: origemNovatos ? "Novatos: sem campanha de origem" : "De qual campanha os logins saem?", autoComplete: "off", 'aria-label': 'Campanha de origem', className: "ct-input w-full rounded-lg pl-9 pr-3 py-3 text-sm", style: { color: BRAND.dark } }),
+                                    React.createElement("input", { type: "text", value: origemQuery, disabled: origemSem, onChange: (e) => { setOrigemQuery(e.target.value); setShowOrigemSug(true); }, onFocus: () => setShowOrigemSug(true), onBlur: () => setTimeout(() => setShowOrigemSug(false), 120), onKeyDown: (e) => { if (e.key === 'Escape' || e.key === 'Enter') setShowOrigemSug(false); }, placeholder: origemNovatos ? "Novatos: sem campanha de origem" : origemRepasse ? "Repasse: sem campanha de origem" : "De qual campanha os logins saem?", autoComplete: "off", 'aria-label': 'Campanha de origem', className: "ct-input w-full rounded-lg pl-9 pr-3 py-3 text-sm", style: { color: BRAND.dark } }),
                                     showOrigemSug && origemSugestoes.length > 0 && !(origemSugestoes.length === 1 && normalize(origemSugestoes[0].name) === normalize(origemTxt)) && React.createElement("div", { className: "ct-pop absolute z-10 mt-1 w-full max-h-56 overflow-y-auto" }, origemSugestoes.map((item) => React.createElement("button", { key: item.key, type: "button", onMouseDown: () => { setOrigemQuery(item.name); setShowOrigemSug(false); }, className: "ct-suggestion ct-origem-sug w-full flex items-center justify-between gap-2 text-left px-3 py-2 text-sm border-b border-stone-100 last:border-0", style: { color: BRAND.dark } },
                                         React.createElement("span", { className: "truncate" }, item.name),
                                         isS2S(item.name) ? React.createElement("span", { className: "ct-chip flex-shrink-0" }, "S2S") : null)))),
-                                React.createElement("label", { className: "ct-check mt-2" },
-                                    React.createElement("input", { type: "checkbox", className: "ct-novatos", checked: origemNovatos, onChange: (e) => { setOrigemNovatos(e.target.checked); setShowOrigemSug(false); if (e.target.checked) setOrigemQuery(''); } }),
-                                    React.createElement("span", null, "Novatos (sem campanha de origem)")),
+                                React.createElement("div", { className: "ct-check-row mt-2" },
+                                    React.createElement("label", { className: "ct-check" },
+                                        React.createElement("input", { type: "checkbox", className: "ct-novatos", checked: origemNovatos, onChange: (e) => { setOrigemNovatos(e.target.checked); setShowOrigemSug(false); if (e.target.checked) { setOrigemRepasse(false); setOrigemQuery(''); } } }),
+                                        React.createElement("span", null, "Novatos")),
+                                    React.createElement("label", { className: "ct-check" },
+                                        React.createElement("input", { type: "checkbox", className: "ct-repasse", checked: origemRepasse, onChange: (e) => { setOrigemRepasse(e.target.checked); setShowOrigemSug(false); if (e.target.checked) { setOrigemNovatos(false); setOrigemQuery(''); } } }),
+                                        React.createElement("span", null, "Repasse")),
+                                    React.createElement("span", { className: "ct-check-dica" }, "sem campanha de origem")),
                                 origemS2S && !retomadoAtivo ? React.createElement("p", { className: "ct-origem-s2s text-xs mt-1.5", style: { color: '#8F4E00' } }, "Origem S2S: precisa do print do “de acordo” no passo 2, como na campanha S2S.") : null),
                             !otherOn && React.createElement("div", null, React.createElement("label", { className: "ct-label" }, "Campanha destino"),
                             React.createElement("div", { className: "relative mt-1.5" },
