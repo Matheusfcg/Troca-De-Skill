@@ -395,7 +395,31 @@ const BRAND = {
 // no rodapé só pra dar pra conferir rapidinho, num piscar de olhos, se
 // duas cópias do arquivo (por exemplo um download antigo x um novo) são
 // a mesma versão ou não, sem precisar comparar comportamento na mão.
-const BUILD_VERSION = 'build 47';
+const BUILD_VERSION = 'build 49';
+// Analistas que aparecem na lista "Nome do solicitante" (nome e sobrenome, como estão na planilha de pedidos).
+// Chegou analista novo? É só acrescentar o nome aqui (a lista é mostrada em ordem alfabética).
+const ANALISTAS = [
+  'André Spinosa', 'Augusto Bueno', 'Carla Pelegrini', 'Fabio Trindade', 'Guilherme Barros', 'Gustavo Porfirio',
+  'Ian Carreon', 'Júlia Fonseca', 'Kamilly Bomfim', 'Kessia Gabriela', 'Lizandra Gonçalves',
+  'Matheus Ferrari', 'Nathallia Proetti', 'Paulo Vilaruel', 'Pedro Oliveira', 'Pedro Sasse', 'Petherson Fabiano',
+  'Robson Souza', 'Rogerio Junior', 'Sheila Assef', 'Toniere Pereira', 'Vinicius Romão', 'Washington Luiz'
+].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+// Nomes digitados em "Outros": ficam guardados neste navegador e passam a aparecer na lista nos próximos pedidos.
+// (Para entrar na lista de todo mundo, acrescente o nome no array ANALISTAS acima.)
+const ANALISTAS_EXTRA_CHAVE = 'ct_analistas_extra';
+function lerAnalistasExtra() {
+  try { const l = JSON.parse(window.localStorage.getItem(ANALISTAS_EXTRA_CHAVE) || '[]'); return Array.isArray(l) ? l.filter((n) => typeof n === 'string' && n.trim()) : []; }
+  catch (e) { return []; }
+}
+function chaveNome(s) { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+// "joão  da SILVA" -> "João da Silva" (partículas ficam em minúscula)
+function arrumarNome(s) {
+  const part = ['da', 'de', 'do', 'das', 'dos', 'e'];
+  return String(s || '').replace(/\s+/g, ' ').trim().split(' ').map((p, i) => {
+    const l = p.toLowerCase();
+    return i > 0 && part.includes(l) ? l : l.charAt(0).toUpperCase() + l.slice(1);
+  }).join(' ');
+}
 // Validação em grupo do Teams (Google Apps Script). Cole aqui a URL do Web App
 // que termina em /exec (NÃO a que termina em /dev, essa só abre pra quem edita).
 // Implantação do Apps Script usada pela ferramenta E pelos links do Teams (a mesma URL fica em URL_APP_ no .gs).
@@ -2683,6 +2707,8 @@ function SkillSwapTool() {
     const numeroParadoRef = useRef('');
     // nome do analista que está fazendo a solicitação
     const [solicitante, setSolicitante] = useState('');
+    const [outroOn, setOutroOn] = useState(false);
+    const [analistasExtra, setAnalistasExtra] = useState(() => lerAnalistasExtra());
     // card "Aprovação": prints e arquivos da aprovação (opcional, um ou mais)
     const [approvalFiles, setApprovalFiles] = useState([]);
     const approvalFilesRef = useRef([]);
@@ -3113,8 +3139,32 @@ function SkillSwapTool() {
                 E("p", { className: "text-xs mt-1 h-4", style: { color: '#737B87' } }, otherSkills.length > 0 ? otherSkills.length + (otherSkills.length > 1 ? ' skills' : ' skill') + ' \u00B7 sem profici\u00EAncia vale 3' : '')),
             E("div", null,
                 E("label", lbl, "Nome do solicitante"),
-                E("input", { type: "text", value: solicitante, onChange: (e) => setSolicitante(e.target.value), placeholder: "Nome do analista", autoComplete: "off", className: "ct-input w-full rounded-lg px-3 py-2.5 text-sm mt-1.5", style: { color: BRAND.dark } })),
+                renderSolicitanteSelect()),
             E("div", null, renderIdField(true)));
+    }
+    // lista suspensa com os analistas (evita nome escrito errado). Se um pedido retomado trouxer um nome que não está
+    // na lista, ele aparece como opção extra para não se perder.
+    function renderSolicitanteSelect() {
+        const E = React.createElement;
+        const atual = solicitante.trim();
+        const base = ANALISTAS.concat(analistasExtra);
+        const jaTem = base.some((n) => chaveNome(n) === chaveNome(atual));
+        const extra = atual && !outroOn && !jaTem ? [atual] : [];
+        const lista = base.concat(extra).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+        const trava = valState === 'sending' || valState === 'pending';
+        const escolher = (v) => {
+            if (v === '__outros__') { setOutroOn(true); setSolicitante(''); }
+            else { setOutroOn(false); setSolicitante(v); }
+        };
+        return E("div", null, E("select", { value: outroOn ? '__outros__' : solicitante, onChange: (e) => escolher(e.target.value), disabled: trava, 'aria-label': 'Nome do solicitante',
+            className: "ct-input w-full rounded-lg px-3 py-2.5 text-sm mt-1.5", style: { color: BRAND.dark, backgroundColor: '#fff' } },
+            E("option", { value: "" }, "Selecione o seu nome"),
+            lista.map((n) => E("option", { key: n, value: n }, n)),
+            E("option", { value: "__outros__" }, "Outros (digitar o nome)")),
+            outroOn && E("input", { type: "text", value: solicitante, onChange: (e) => setSolicitante(e.target.value), onBlur: (e) => setSolicitante(arrumarNome(e.target.value)),
+                disabled: trava, placeholder: "Digite nome e sobrenome", autoComplete: "off", 'aria-label': 'Nome do solicitante (outros)',
+                className: "ct-input ct-solic-outro w-full rounded-lg px-3 py-2.5 text-sm mt-2", style: { color: BRAND.dark } }),
+            outroOn && E("p", { className: "text-[11px] mt-1", style: { color: '#737B87' } }, "O nome fica salvo neste navegador e passa a aparecer na lista."));
     }
     // build 43: retoma um pedido guardado no navegador (os campos voltam como foram enviados e a tela volta a acompanhar)
     const retomarPedido = (p) => {
@@ -3347,6 +3397,20 @@ function SkillSwapTool() {
         setValProg('');
         setValMsg('');
         setValState('sending');
+        let solicFinal = solicitante.trim();
+        // nome digitado em "Outros": arruma a escrita e guarda para a próxima vez (já existe na lista -> usa o da lista)
+        if (outroOn && solicitante.trim()) {
+            const bonito = arrumarNome(solicitante);
+            const igual = ANALISTAS.concat(analistasExtra).find((n) => chaveNome(n) === chaveNome(bonito));
+            if (!igual) {
+                const nova = analistasExtra.concat([bonito]);
+                setAnalistasExtra(nova);
+                try { window.localStorage.setItem(ANALISTAS_EXTRA_CHAVE, JSON.stringify(nova)); } catch (e) { /* sem storage: vale só neste pedido */ }
+            }
+            solicFinal = igual || bonito;
+            setSolicitante(solicFinal);
+            setOutroOn(false);
+        }
         valStart.current = Date.now();
         const ids = [];
         const avisos = [];
@@ -3364,7 +3428,7 @@ function SkillSwapTool() {
                     logins: part.join(', '),
                     skills: campaignSkills.map((s) => s.skill).join(', '),
                     det: buildDetalhes(rowsFor(part)),
-                    solicitante: solicitante.trim(),
+                    solicitante: solicFinal,
                     comentario: otherOn ? '' : comment.trim(),
                     parte: chunks.length > 1 ? (k + 1) + '/' + chunks.length : '',
                     totalLogins: logins.length,
@@ -3395,7 +3459,7 @@ function SkillSwapTool() {
             if (avisos.length) setValMsg('Atenção: o pedido foi registrado, mas ' + avisos.join(' · '));
             valStart.current = Date.now();
             setValState('pending');
-            guardarPendente({ v: 1, ids: ids.join(','), parts: chunks.length, enviadoEm: Date.now(), numero, solicitante, loginsRaw, comment,
+            guardarPendente({ v: 1, ids: ids.join(','), parts: chunks.length, enviadoEm: Date.now(), numero, solicitante: solicFinal, loginsRaw, comment,
                 otherOn, otherName, otherSkillsRaw, campaign, campaignQuery, campNome: selectedCampaign ? selectedCampaign.name : '',
                 aba: selectedCampaign ? selectedCampaign.sheetName : '', origemQuery, origemNovatos, origemRepasse, arquivo: meta ? meta.fileName : '',
                 nLogins: logins.length, impressao: impressaoTemplate(logins, campaignSkills),
@@ -3946,7 +4010,7 @@ function SkillSwapTool() {
                             React.createElement("p", { className: "text-xs mt-1 h-4", style: { color: '#737B87' } }, logins.length > 0 ? logins.length + (logins.length > 1 ? ' logins únicos' : ' login único') : ''),
                             React.createElement("div", { className: "mt-3" },
                                 React.createElement("label", { className: "ct-label" }, "Nome do solicitante"),
-                                React.createElement("input", { type: "text", value: solicitante, onChange: (e) => setSolicitante(e.target.value), placeholder: "Nome do analista", autoComplete: "off", className: "ct-input w-full rounded-lg px-3 py-2.5 text-sm mt-1.5", style: { color: BRAND.dark } }))),
+                                renderSolicitanteSelect())),
                         React.createElement("div", null,
                             React.createElement("div", { className: "ct-origem mb-4" },
                                 React.createElement("label", { className: "ct-label" }, "Campanha de origem"),
