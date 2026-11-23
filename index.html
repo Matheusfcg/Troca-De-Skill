@@ -395,7 +395,7 @@ const BRAND = {
 // no rodapé só pra dar pra conferir rapidinho, num piscar de olhos, se
 // duas cópias do arquivo (por exemplo um download antigo x um novo) são
 // a mesma versão ou não, sem precisar comparar comportamento na mão.
-const BUILD_VERSION = 'build 49';
+const BUILD_VERSION = 'build 50';
 // Analistas que aparecem na lista "Nome do solicitante" (nome e sobrenome, como estão na planilha de pedidos).
 // Chegou analista novo? É só acrescentar o nome aqui (a lista é mostrada em ordem alfabética).
 const ANALISTAS = [
@@ -2859,7 +2859,9 @@ function SkillSwapTool() {
     const s2sOk = retomadoAtivo || !isS2SCampaign || imgCount >= s2sMin;
     // mais de 10 logins: pelo menos 1 print
     // (em "outra matriz" o bloco de comentário fica oculto, então a regra do print não se aplica)
-    const printNeeded = !otherOn && logins.length > LOGINS_PRINT_MIN;
+    // build 50: Novatos e Repasse (sem campanha de origem) não entram na regra do "de acordo": nem print obrigatório,
+    // nem leitura, nem "Quem deu o de acordo?". Campanha DESTINO S2S continua pedindo o print. (No Apps Script: semOrigem.)
+    const printNeeded = !otherOn && !origemSem && logins.length > LOGINS_PRINT_MIN;
     const printOk = retomadoAtivo || !printNeeded || imgCount >= 1;
     // prints do "de acordo" (mais de 10 logins e/ou campanha S2S): cada imagem é lida uma vez, assim que entra.
     // A leitura confere: se alguém da lista negou (negado é negado), quem deu o "de acordo" (só com mais de 10 logins)
@@ -3435,6 +3437,9 @@ function SkillSwapTool() {
                     outraMatriz: otherOn ? otherTrim : '',
                     origem: (otherOn || origemNovatos) ? '' : (origemRepasse ? ORIGEM_REPASSE_TXT : origemTxt),
                     origemNovatos: !otherOn && origemNovatos,
+                    // build 50: o Apps Script tira o Repasse da regra do "de acordo" por este campo (o texto da origem
+                    // continua indo, para um Apps Script ainda não atualizado aceitar o pedido)
+                    origemRepasse: !otherOn && !origemNovatos && origemRepasse,
                     acordo: acordoEnvio,
                     anexos: (otherOn ? [] : approvalFiles).map((f) => ({ name: f.kind === 'img' ? f.name.replace(/\.[^.\/\\]*$/, '') + '.jpg' : f.name, kind: f.kind, dataUrl: f.dataUrl })),
                 };
@@ -4028,6 +4033,9 @@ function SkillSwapTool() {
                                         React.createElement("input", { type: "checkbox", className: "ct-repasse", checked: origemRepasse, onChange: (e) => { setOrigemRepasse(e.target.checked); setShowOrigemSug(false); if (e.target.checked) { setOrigemNovatos(false); setOrigemQuery(''); } } }),
                                         React.createElement("span", null, "Repasse")),
                                     React.createElement("span", { className: "ct-check-dica" }, "sem campanha de origem")),
+                                origemSem ? React.createElement("p", { className: "ct-origem-livre text-xs mt-1.5", style: { color: '#4E5662' } },
+                                    (origemNovatos ? 'Novatos' : 'Repasse') + ': não precisa do “de acordo”' +
+                                    (isS2SDestino ? ' (a campanha destino é S2S: o print do “de acordo” continua obrigatório).' : '.')) : null,
                                 origemS2S && !retomadoAtivo ? React.createElement("p", { className: "ct-origem-s2s text-xs mt-1.5", style: { color: '#8F4E00' } }, "Origem S2S: precisa do print do “de acordo” no passo 2, como na campanha S2S.") : null),
                             !otherOn && React.createElement("div", null, React.createElement("label", { className: "ct-label" }, "Campanha destino"),
                             React.createElement("div", { className: "relative mt-1.5" },
