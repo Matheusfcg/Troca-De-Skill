@@ -254,8 +254,42 @@ select.ct-input{-webkit-appearance:none;appearance:none;background-image:url("da
 .ct-retomar-err{margin-top:4px;font-size:12px;line-height:16px;color:var(--err-t)}
 .ct-retomar-acoes{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .ct-retomar .ct-btn-primary{border-radius:8px;font-weight:600;height:30px;padding:0 14px;font-size:12.5px}
-.ct-retomado-nota{margin-top:12px;padding:12px;border-radius:8px;background:var(--surface-2);border:1px solid var(--line);font-size:12px;line-height:17px;color:var(--ink-2)}
-.ct-retomado-t{font-weight:700;color:var(--ink);margin-bottom:2px}
+/* build 53: "Trocas enviadas" (várias trocas ao mesmo tempo), em cima do Resumo da troca */
+.ct-aside-in{display:flex;flex-direction:column;gap:16px}
+.ct-fila{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--sh-panel);display:flex;flex-direction:column;min-height:0}
+.ct-fila-h{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:14px 18px 10px;border-bottom:1px solid var(--line-2)}
+.ct-fila-h .ct-pill{flex-shrink:0}
+.ct-fila-s{margin-top:2px;font-size:12px;line-height:16px;color:var(--ink-4)}
+.ct-fila-lista{list-style:none;margin:0;padding:6px 12px 10px;overflow-y:auto;min-height:0}
+.ct-troca{position:relative;margin-top:6px;padding:10px 12px 10px 14px;border:1px solid var(--line);border-left:4px solid var(--warn);border-radius:10px;background:var(--surface)}
+.ct-troca-ok{border-left-color:var(--ok);background:var(--ok-bg)}
+.ct-troca-err{border-left-color:var(--err);background:var(--err-bg)}
+.ct-troca-nova{animation:ct-troca-luz 1.6s ease-out 1}
+@keyframes ct-troca-luz{0%{box-shadow:0 0 0 0 rgba(30,142,90,.35)}100%{box-shadow:0 0 0 10px rgba(30,142,90,0)}}
+.ct-troca-err.ct-troca-nova{animation-name:ct-troca-luz-err}
+@keyframes ct-troca-luz-err{0%{box-shadow:0 0 0 0 rgba(200,40,28,.3)}100%{box-shadow:0 0 0 10px rgba(200,40,28,0)}}
+.ct-troca-top{display:flex;align-items:center;gap:8px;min-width:0}
+.ct-troca-n{flex:1 1 auto;min-width:0;font-size:13.5px;line-height:19px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ct-troca-x{flex-shrink:0;width:22px;height:22px;border-radius:6px;font-size:12px;line-height:22px;text-align:center;color:var(--ink-4)}
+.ct-troca-x:hover{background:var(--surface-3);color:var(--ink)}
+.ct-troca-m{margin-top:1px;font-size:12px;line-height:17px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.ct-troca-st{margin-top:4px;font-size:12.5px;line-height:17px;font-weight:600;color:var(--warn-t)}
+.ct-troca-ok .ct-troca-st{color:var(--ok-t)}
+.ct-troca-err .ct-troca-st{color:var(--err-t)}
+.ct-troca-mot{margin-top:2px;font-size:12px;line-height:17px;color:var(--err-t);overflow-wrap:anywhere}
+.ct-troca-av{margin-top:4px;font-size:12px;line-height:16px;color:var(--ink-3);overflow-wrap:anywhere}
+.ct-troca-av.warn{color:var(--warn-t)}
+.ct-troca-acoes{margin-top:8px;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.ct-troca .ct-btn-primary{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:8px;font-size:12.5px;font-weight:600;color:#fff}
+.ct-troca .ct-btn-sec{display:inline-flex;align-items:center;gap:6px}
+.ct-dl-nota{padding-top:14px;border-top:1px dashed var(--line);line-height:17px}
+@media (min-width:1180px){
+  .ct-aside-in{max-height:calc(100vh - 32px)}
+  .ct-aside-in .ct-panel{max-height:none;flex:1 1 auto;min-height:0}
+  .ct-fila{flex:0 0 auto;max-height:40vh}
+  /* com o bloco em cima, o Resumo pode ficar menor que o conteúdo: a conferência rola e o botão fica sempre à vista */
+  .ct-aside-in .ct-act{position:sticky;bottom:0;z-index:1;background:var(--surface);border-radius:0 0 14px 14px;box-shadow:0 -10px 16px -14px rgba(16,24,40,.25)}
+}
 @media (max-width:639px){.ct-retomar{padding:14px 16px}}
 </style>
 <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
@@ -395,7 +429,7 @@ const BRAND = {
 // no rodapé só pra dar pra conferir rapidinho, num piscar de olhos, se
 // duas cópias do arquivo (por exemplo um download antigo x um novo) são
 // a mesma versão ou não, sem precisar comparar comportamento na mão.
-const BUILD_VERSION = 'build 51';
+const BUILD_VERSION = 'build 53';
 // Analistas que aparecem na lista "Nome do solicitante" (nome e sobrenome, como estão na planilha de pedidos).
 // Chegou analista novo? É só acrescentar o nome aqui (a lista é mostrada em ordem alfabética).
 const ANALISTAS = [
@@ -2614,7 +2648,7 @@ const LeituraAcordo = (function () {
 // neste navegador, por até 3 dias, e sai da lista quando o template é baixado, quando o pedido é reprovado ou quando
 // o analista muda o pedido. Os prints não ficam guardados: eles já foram junto com o pedido para o Apps Script.
 const PENDENTES_CHAVE = 'ct-troca-pedidos-pendentes-v1';
-const PENDENTES_MAX = 5;
+const PENDENTES_MAX = 20;   // build 53: várias trocas ao mesmo tempo (antes 5)
 const PENDENTES_VALIDADE_MS = 3 * 24 * 60 * 60 * 1000;
 function lerPendentes() {
   try {
@@ -2645,6 +2679,45 @@ function impressaoTemplate(loginList, skills) {
   return n + ':' + h.toString(16);
 }
 
+// build 53: arquivos do template (um por parte) para uma lista de logins e as skills da campanha. Mesmo formato de sempre:
+// "Login;Skill;Proficiencia", ";" e quebra CRLF, sem BOM; login sem skill vira só o login; nome = Nº do ID (39900.csv,
+// dividido: 39900_parte1de2.csv). O cartão da troca guarda estes arquivos na hora do envio.
+function arquivosTemplate(loginList, skills, numeroId, rotulo, dividir) {
+  const header = ['Login', 'Skill', 'Proficiencia'].join(';');
+  const lista = skills || [];
+  const chunks = dividir ? chunkList(loginList, SPLIT_SIZE) : [loginList];
+  const safeName = String(rotulo || '').replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '').slice(0, 60);
+  const idArq = String(numeroId || '').replace(/\D/g, '');
+  const base = idArq || ('template_agentes_' + safeName);
+  return chunks.map((part, k) => {
+    const n = Math.max(part.length, lista.length);
+    const lines = [];
+    for (let i = 0; i < n; i++) {
+      const login = part[i] || '';
+      const skill = (lista[i] && lista[i].skill) || '';
+      const prof = (lista[i] && lista[i].prof) || '';
+      lines.push((login && !skill && !prof) ? login : [login, skill, prof].join(';'));
+    }
+    return { nome: base + (chunks.length > 1 ? '_parte' + (k + 1) + 'de' + chunks.length : '') + '.csv', csv: [header].concat(lines).join('\r\n') };
+  });
+}
+// baixa os arquivos (vários: espaçados para o navegador não barrar)
+function baixarArquivos(arquivos) {
+  (arquivos || []).forEach((f, k) => {
+    setTimeout(() => {
+      const blob = new Blob([f.csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = f.nome;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    }, k * 400);
+  });
+}
+
 function SkillSwapTool() {
     const [matrix, setMatrix] = useState(null);
     const [campaignOrder, setCampaignOrder] = useState([]);
@@ -2666,29 +2739,26 @@ function SkillSwapTool() {
     const [origemRepasse, setOrigemRepasse] = useState(false);
     const [showOrigemSug, setShowOrigemSug] = useState(false);
     const [showBlocks, setShowBlocks] = useState(false);
-    const [downloaded, setDownloaded] = useState(false);
-    // validação: idle | sending | pending | approved | rejected | timeout | error
+    // envio da troca que está no formulário: idle | sending | error. Build 53: enviada, a troca vira um cartão em
+    // "Trocas enviadas" (que acompanha a validação) e o formulário fica livre para a próxima
     const [numero, setNumero] = useState('');
     const [valState, setValState] = useState('idle');
-    const [valId, setValId] = useState('');
-    const [valWho, setValWho] = useState('');
     const [valMsg, setValMsg] = useState('');
-    const [valMotivo, setValMotivo] = useState('');
-    const [popup, setPopup] = useState(null);
-    const [valParts, setValParts] = useState(1);
-    const [valProg, setValProg] = useState('');
+    const [avisoEnvio, setAvisoEnvio] = useState('');
     const [splitAsk, setSplitAsk] = useState(false);
     const [otherOn, setOtherOn] = useState(false);
     const [otherName, setOtherName] = useState('');
     const [otherSkillsRaw, setOtherSkillsRaw] = useState('');
-    const valStart = useRef(0);
-    // build 43: pedidos aguardando validação guardados no navegador (aviso "Retomar") e o pedido retomado nesta tela
+    // build 53: trocas enviadas nesta tela, várias ao mesmo tempo. Cada uma guarda os ids do Apps Script, os arquivos do
+    // template, a situação (pendente | aprovado | reprovado | semDecisao | naoEncontrado) e os dados do formulário (para
+    // "Corrigir"). Ficam só na memória da página: somem com F5 ou fechando o site (o "Retomar" traz as pendentes de volta).
+    const [trocas, setTrocas] = useState([]);
+    const trocasRef = useRef([]);
+    trocasRef.current = trocas;
+    const [corrigirAviso, setCorrigirAviso] = useState('');
+    // build 43: pedidos aguardando validação guardados no navegador (aviso "Retomar")
     const [pendentes, setPendentes] = useState(() => lerPendentes());
-    const [retomado, setRetomado] = useState(null);
     const [retomarErro, setRetomarErro] = useState({});
-    const pularReset = useRef(false);
-    const valIdRef = useRef('');
-    valIdRef.current = valId;
     useEffect(() => {
         // outra aba guardou ou tirou um pedido: atualiza o aviso
         const aoMudar = (e) => { if (!e || e.key === PENDENTES_CHAVE) setPendentes(lerPendentes()); };
@@ -2696,11 +2766,10 @@ function SkillSwapTool() {
         return () => window.removeEventListener('storage', aoMudar);
     }, []);
     // leitura dos prints do "de acordo": o que foi lido ({ chave, pronto, leituras, numeros, falhas, motivo }), o andamento,
-    // o que o analista escolheu em "Quem deu o de acordo?" e o resumo mostrado depois do envio
+    // e o que o analista escolheu em "Quem deu o de acordo?" (o resumo enviado fica no cartão da troca)
     const [acordoLido, setAcordoLido] = useState(null);
     const [acordoAndamento, setAcordoAndamento] = useState('');
     const [acordoManual, setAcordoManual] = useState('');
-    const [acordoInfo, setAcordoInfo] = useState(null);
     const acordoChave = useRef('');
     // Nº do ID "parado" (0,7 s sem digitar): é com ele que a tela decide reler os prints (build 44, ver mais abaixo)
     const [numeroParado, setNumeroParado] = useState('');
@@ -2715,8 +2784,6 @@ function SkillSwapTool() {
     approvalFilesRef.current = approvalFiles;
     // texto do bloco "Comentário"
     const [comment, setComment] = useState('');
-    // aviso mostrado embaixo do botão de download (painel "Resumo da troca") depois que o template é baixado e a tela é reiniciada
-    const [lastDownload, setLastDownload] = useState('');
     const [approvalMsg, setApprovalMsg] = useState('');
     const [approvalDrag, setApprovalDrag] = useState(false);
     const approvalInput = useRef(null);
@@ -2735,27 +2802,15 @@ function SkillSwapTool() {
     // por causa da própria mudança de texto que o clique provocou
     const lastPicked = useRef({ query: '', key: '' });
     useEffect(() => {
-        // o "Retomar" preenche todos os campos de uma vez: essa mudança não cancela o pedido retomado
-        if (pularReset.current) return;
-        // o analista mudou o pedido que estava em validação: ele sai da lista do "Retomar"
-        if (valIdRef.current) { tirarPendente(valIdRef.current); setPendentes(lerPendentes()); }
-        setRetomado(null);
-        setDownloaded(false);
-        // qualquer mudança no pedido (logins, campanhas, Nº do ID, solicitante, comentário, prints) invalida a aprovação anterior
-        setValState('idle');
-        setValId('');
-        setValWho('');setValMotivo('');
+        // build 53: mexeu no formulário depois de um erro no envio: some o aviso do erro (as trocas já enviadas seguem
+        // nos cartões delas, sem mudar nada)
+        setValState((v) => (v === 'error' ? 'idle' : v));
         setValMsg('');
-        setValParts(1);
-        setValProg('');
-        setAcordoInfo(null);
     }, [campaign, loginsRaw, solicitante, approvalFiles, comment, otherOn, otherName, otherSkillsRaw, numero, origemQuery, origemNovatos, origemRepasse]);
-    // a trava do "Retomar" vale só para a renderização em que os campos foram preenchidos
-    useEffect(() => { pularReset.current = false; });
     useEffect(() => {
-        // começou uma nova solicitação: some o aviso do download anterior
-        if (campaign || loginsRaw || solicitante || approvalFiles.length > 0 || comment) setLastDownload('');
-    }, [campaign, loginsRaw, solicitante, approvalFiles, comment]);
+        // começou a próxima troca: some o aviso "Pedido ... enviado" (o nome do solicitante continua depois do envio)
+        if (campaign || loginsRaw.trim() || numero || approvalFiles.length > 0 || comment.trim()) setAvisoEnvio('');
+    }, [campaign, loginsRaw, numero, approvalFiles, comment]);
     // campanhas cujo NOME (não a chave aba+nome) bate exatamente com o que
     // está digitado — mais de uma aqui significa "esse nome existe em mais
     // de uma aba", o caso que motivou essa correção toda
@@ -2854,15 +2909,13 @@ function SkillSwapTool() {
     const s2sRotulo = isS2SDestino ? 'Campanha S2S' : 'Campanha de origem S2S';
     const imgCount = approvalFiles.filter((f) => f.kind === 'img').length;
     const s2sMin = s2sMinImages(meta && meta.fileName);
-    // pedido retomado (build 43): os prints foram junto com o pedido e o Apps Script já conferiu; não há o que anexar de novo
-    const retomadoAtivo = Boolean(retomado && valId && retomado.ids === valId);
-    const s2sOk = retomadoAtivo || !isS2SCampaign || imgCount >= s2sMin;
+    const s2sOk = !isS2SCampaign || imgCount >= s2sMin;
     // mais de 10 logins: pelo menos 1 print
     // (em "outra matriz" o bloco de comentário fica oculto, então a regra do print não se aplica)
     // build 50: Novatos e Repasse (sem campanha de origem) não entram na regra do "de acordo": nem print obrigatório,
     // nem leitura, nem "Quem deu o de acordo?". Campanha DESTINO S2S continua pedindo o print. (No Apps Script: semOrigem.)
     const printNeeded = !otherOn && !origemSem && logins.length > LOGINS_PRINT_MIN;
-    const printOk = retomadoAtivo || !printNeeded || imgCount >= 1;
+    const printOk = !printNeeded || imgCount >= 1;
     // prints do "de acordo" (mais de 10 logins e/ou campanha S2S): cada imagem é lida uma vez, assim que entra.
     // A leitura confere: se alguém da lista negou (negado é negado), quem deu o "de acordo" (só com mais de 10 logins)
     // e se o Nº do ID digitado é o mesmo que aparece no print. As regras ficam em LeituraAcordo.resultado.
@@ -3011,22 +3064,36 @@ function SkillSwapTool() {
     };
     const handleLoginsPaste = (e) => {
         const cd = e.clipboardData;
-        // colou uma IMAGEM (print): vai para o bloco de comentário, não para os logins
-        // (se também veio texto, como numa cópia do Excel, segue o fluxo normal dos logins)
-        const pastedImg = cd && !cd.getData('text') ? getImageFromClipboard(cd) : null;
-        if (pastedImg) {
-            e.preventDefault();
-            handleApprovalFile(pastedImg);
-            return;
-        }
-        // colou o ARQUIVO (copiou no Explorer e deu Ctrl+V): lê o arquivo
-        if (cd && cd.files && cd.files.length > 0) {
-            e.preventDefault();
-            handleLoginsFile(cd.files[0]);
-            return;
+        const text = cd ? cd.getData('text') : '';
+        // build 52: células copiadas do Excel (de um arquivo baixado, por exemplo) chegam como TEXTO e também como uma
+        // IMAGEM das células. Antes a imagem era tratada como "arquivo colado" e dava "Não consegui ler esse arquivo".
+        // Agora, se veio texto, vale o texto (a imagem é ignorada).
+        const arquivos = getFilesFromClipboard(cd);
+        const arqLogins = arquivos.find((f) => /\.(xlsx|xlsm|xls|csv|txt|tsv)$/i.test(f.name || '') || /spreadsheet|ms-excel|csv|tab-separated|text\/plain/i.test(f.type || ''));
+        // copiou o ARQUIVO no Explorer: às vezes vem junto, como texto, só o nome (ou o caminho) do arquivo
+        const textoEhNome = Boolean(arqLogins) && /^[^\r\n]*\.(xlsx|xlsm|xls|csv|txt|tsv)$/i.test(String(text).trim());
+        if (!String(text).trim() || textoEhNome) {
+            // colou o ARQUIVO (copiou no Explorer e deu Ctrl+V): lê o arquivo
+            if (arqLogins) {
+                e.preventDefault();
+                handleLoginsFile(arqLogins);
+                return;
+            }
+            // colou uma IMAGEM (print): vai para o bloco de comentário, não para os logins
+            const pastedImg = getImageFromClipboard(cd);
+            if (pastedImg) {
+                e.preventDefault();
+                handleApprovalFile(pastedImg);
+                return;
+            }
+            // outro tipo de arquivo (PDF, Word...): não dá para tirar os logins dele
+            if (arquivos.length > 0) {
+                e.preventDefault();
+                setLoginsMsg('Não dá para ler logins desse tipo de arquivo. Use .xlsx, .xls, .csv ou .txt, ou abra o arquivo, copie as células dos logins e cole aqui.');
+                return;
+            }
         }
         // colou uma tabela do Excel (várias linhas e colunas): acha a coluna de logins
-        const text = cd ? cd.getData('text') : '';
         if (text && text.indexOf('\t') >= 0) {
             const rows = text.split(/\r?\n/).filter((l) => l.trim() !== '').map((l) => l.split('\t'));
             if (rows.length >= 2 && rows.filter((r) => r.length >= 2).length >= rows.length / 2) {
@@ -3153,7 +3220,7 @@ function SkillSwapTool() {
         const jaTem = base.some((n) => chaveNome(n) === chaveNome(atual));
         const extra = atual && !outroOn && !jaTem ? [atual] : [];
         const lista = base.concat(extra).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-        const trava = valState === 'sending' || valState === 'pending';
+        const trava = valState === 'sending';
         const escolher = (v) => {
             if (v === '__outros__') { setOutroOn(true); setSolicitante(''); }
             else { setOutroOn(false); setSolicitante(v); }
@@ -3168,58 +3235,41 @@ function SkillSwapTool() {
                 className: "ct-input ct-solic-outro w-full rounded-lg px-3 py-2.5 text-sm mt-2", style: { color: BRAND.dark } }),
             outroOn && E("p", { className: "text-[11px] mt-1", style: { color: '#737B87' } }, "O nome fica salvo neste navegador e passa a aparecer na lista."));
     }
-    // build 43: retoma um pedido guardado no navegador (os campos voltam como foram enviados e a tela volta a acompanhar)
+    // build 53: muda uma troca da lista (por chave)
+    const atualizarTroca = (key, mud) => setTrocas((l) => l.map((t) => (t.key === key ? Object.assign({}, t, typeof mud === 'function' ? mud(t) : mud) : t)));
+    // build 43 + 53: retoma um pedido guardado no navegador: ele volta para "Trocas enviadas" e a tela volta a acompanhar
+    // a validação (o formulário não muda). O template é montado de novo com a matriz carregada e conferido pela impressão.
     const retomarPedido = (p) => {
         const erro = (msg) => setRetomarErro((e) => Object.assign({}, e, { [p.ids]: msg }));
         let skills;
         if (p.otherOn) {
             skills = parseSkillsInput(p.otherSkillsRaw || '');
         } else {
-            if (!matrix) { erro('Carregue a matriz ' + (p.arquivo ? '“' + p.arquivo + '” ' : '') + 'no passo 1 primeiro.'); return; }
+            if (!matrix) { erro('Carregue a matriz ' + (p.arquivo ? '“' + p.arquivo + '” ' : '') + 'no passo 1 primeiro.'); return false; }
             skills = matrix[p.campaign];
-            if (!skills) { erro('A campanha ' + (p.campNome || '') + (p.aba ? ' (aba ' + p.aba + ')' : '') + ' não está na matriz carregada. Carregue a matriz ' + (p.arquivo ? '“' + p.arquivo + '”' : 'usada no pedido') + '.'); return; }
+            if (!skills) { erro('A campanha ' + (p.campNome || '') + (p.aba ? ' (aba ' + p.aba + ')' : '') + ' não está na matriz carregada. Carregue a matriz ' + (p.arquivo ? '“' + p.arquivo + '”' : 'usada no pedido') + '.'); return false; }
         }
-        if (impressaoTemplate(parseLogins(p.loginsRaw || ''), skills) !== p.impressao) {
+        const lista = parseLogins(p.loginsRaw || '');
+        if (impressaoTemplate(lista, skills) !== p.impressao) {
             erro('A matriz carregada gera um template diferente do que foi para a validação (as skills dessa campanha mudaram). Descarte este pedido e peça uma nova validação.');
-            return;
+            return false;
         }
-        pularReset.current = true;
-        lastPicked.current = { query: p.campaignQuery || '', key: p.campaign || '' };
-        setOtherOn(Boolean(p.otherOn));
-        setOtherName(p.otherName || '');
-        setOtherSkillsRaw(p.otherSkillsRaw || '');
-        setCampaignQuery(p.campaignQuery || '');
-        setCampaign(p.campaign || '');
-        setShowSuggestions(false);
-        setOrigemQuery(p.origemQuery || '');
-        setOrigemNovatos(Boolean(p.origemNovatos));
-        setOrigemRepasse(Boolean(p.origemRepasse) && !p.origemNovatos);
-        setShowOrigemSug(false);
-        setLoginsRaw(p.loginsRaw || '');
-        setLoginsFile(null);
-        setLoginsMsg('');
-        setSolicitante(p.solicitante || '');
-        setNumero(p.numero || '');
-        setComment(p.comment || '');
-        setApprovalFiles([]);
-        approvalFilesRef.current = [];
-        setApprovalMsg('');
-        setAcordoManual('');
-        setDownloaded(false);
-        setLastDownload('');
-        setPopup(null);
-        setSplitAsk(false);
-        setValId(p.ids);
-        setValParts(p.parts || 1);
-        setValProg('');
-        setValMsg('');
-        setValWho('');
-        setValMotivo('');
-        setAcordoInfo(p.acordoInfo || null);
-        setRetomado({ ids: p.ids });
-        setRetomarErro({});
-        valStart.current = Date.now();
-        setValState('pending');
+        const ids = String(p.ids || '').split(',').filter(Boolean);
+        const partes = p.parts || ids.length || 1;
+        const agora = Date.now();
+        const rotulo = p.otherOn ? 'outra_matriz' : ((p.aba ? p.aba + '_' : '') + (p.campNome || p.campaignQuery || ''));
+        const item = {
+            key: p.ids, ids: ids, numero: String(p.numero || '').replace(/\D/g, ''), otherOn: Boolean(p.otherOn), otherName: p.otherName || '',
+            campNome: p.campNome || p.campaignQuery || '', aba: p.aba || '', nLogins: lista.length, partes: partes,
+            enviadoEm: p.enviadoEm || agora, inicio: agora, status: 'pendente', prog: 0, validador: '', motivo: '',
+            arquivos: arquivosTemplate(lista, skills, p.numero, rotulo, partes > 1), baixado: false, acordo: p.acordoInfo || null, aviso: '', retomado: true,
+            form: { otherOn: Boolean(p.otherOn), otherName: p.otherName || '', otherSkillsRaw: p.otherSkillsRaw || '', campaign: p.campaign || '', campaignQuery: p.campaignQuery || '',
+                origemQuery: p.origemQuery || '', origemNovatos: Boolean(p.origemNovatos), origemRepasse: Boolean(p.origemRepasse), loginsRaw: p.loginsRaw || '',
+                solicitante: p.solicitante || '', numero: p.numero || '', comment: p.comment || '' },
+        };
+        setTrocas((l) => [item].concat(l.filter((t) => t.key !== item.key)));
+        setRetomarErro((e) => { const c = Object.assign({}, e); delete c[p.ids]; return c; });
+        return true;
     };
     const descartarPendente = (p) => {
         tirarPendente(p.ids);
@@ -3228,16 +3278,18 @@ function SkillSwapTool() {
     };
     function renderRetomar() {
         const E = React.createElement;
-        const ocupado = valState === 'sending' || valState === 'pending' || valState === 'approved';
-        const lista = ocupado ? [] : pendentes.filter((p) => p.ids !== valId);
+        const lista = pendentes.filter((p) => !trocas.some((t) => t.key === p.ids));
         if (lista.length === 0) return null;
         const quando = (ms) => { try { return new Date(ms).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
+        const todasProntas = lista.length > 1 && lista.every((p) => p.otherOn || matrix);
         return E("section", { className: "ct-retomar", "aria-label": "Pedidos aguardando validação" },
             E("div", { className: "ct-retomar-h" },
                 E("div", { className: "min-w-0" },
                     E("p", { className: "ct-retomar-t" }, lista.length > 1 ? 'Pedidos aguardando validação' : 'Pedido aguardando validação'),
-                    E("p", { className: "ct-retomar-s" }, 'A aba foi fechada ou recarregada antes da decisão. Retome para acompanhar a validação e baixar o template aqui, sem pedir de novo.')),
-                pill({ txt: lista.length > 1 ? lista.length + ' pedidos' : (lista[0].aprovadoPor ? 'Validado' : 'Em validação'), tom: lista.length === 1 && lista[0].aprovadoPor ? 'ok' : 'warn' })),
+                    E("p", { className: "ct-retomar-s" }, 'A aba foi fechada ou recarregada antes da decisão. Retome para a troca voltar para “Trocas enviadas”, acompanhar a validação e baixar o template, sem pedir de novo.')),
+                E("div", { className: "flex items-center gap-2 flex-shrink-0" },
+                    todasProntas && E("button", { type: "button", className: "ct-btn-primary ct-retomar-todos", style: { borderRadius: 8, fontWeight: 600, height: 30, padding: '0 14px', fontSize: 12.5 }, onClick: () => lista.forEach((p) => retomarPedido(p)) }, 'Retomar todas'),
+                    pill({ txt: lista.length > 1 ? lista.length + ' pedidos' : (lista[0].aprovadoPor ? 'Validado' : 'Em validação'), tom: lista.length === 1 && lista[0].aprovadoPor ? 'ok' : 'warn' }))),
             lista.map((p) => {
                 const precisaMatriz = !p.otherOn && !matrix;
                 const titulo = 'ID ' + (p.numero || '—') + ' · ' + (p.otherOn ? 'Outra matriz' + (p.otherName ? ' · ' + p.otherName : '') : (p.campNome || p.campaignQuery || '—'));
@@ -3254,11 +3306,98 @@ function SkillSwapTool() {
                         E("button", { type: "button", className: "ct-btn-sec ct-btn-xs ct-retomar-nao", onClick: () => descartarPendente(p) }, 'Descartar')));
             }));
     }
-    function renderNotaRetomado() {
+    // build 53: baixar, tirar da lista e corrigir uma troca
+    const baixarTroca = (t) => {
+        baixarArquivos(t.arquivos);
+        atualizarTroca(t.key, { baixado: true, novidade: false });
+        tirarPendente(t.key);
+        setPendentes(lerPendentes());
+    };
+    const tirarTroca = (t) => {
+        setTrocas((l) => l.filter((x) => x.key !== t.key));
+        if (corrigirAviso === t.key) setCorrigirAviso('');
+    };
+    const formularioTemAlgo = () => Boolean(loginsRaw.trim() || numero || campaign || comment.trim() || approvalFiles.length || (otherOn && otherSkillsRaw.trim()));
+    // "Corrigir" (troca reprovada): os dados voltam para o formulário (menos os prints) para ajustar e mandar de novo.
+    // Se o formulário já tem outra troca, o primeiro clique só avisa; o segundo substitui.
+    const corrigirTroca = (t) => {
+        if (formularioTemAlgo() && corrigirAviso !== t.key) { setCorrigirAviso(t.key); return; }
+        setCorrigirAviso('');
+        const f = t.form || {};
+        const chaveOk = Boolean(f.otherOn || (matrix && f.campaign && matrix[f.campaign]));
+        lastPicked.current = chaveOk && !f.otherOn ? { query: f.campaignQuery || '', key: f.campaign || '' } : { query: '', key: '' };
+        setOtherOn(Boolean(f.otherOn));
+        setOtherName(f.otherName || '');
+        setOtherSkillsRaw(f.otherSkillsRaw || '');
+        setCampaignQuery(f.campaignQuery || '');
+        setCampaign(chaveOk && !f.otherOn ? (f.campaign || '') : '');
+        setShowSuggestions(false);
+        setOrigemQuery(f.origemQuery || '');
+        setOrigemNovatos(Boolean(f.origemNovatos));
+        setOrigemRepasse(Boolean(f.origemRepasse) && !f.origemNovatos);
+        setShowOrigemSug(false);
+        setLoginsRaw(f.loginsRaw || '');
+        setLoginsFile(null);
+        setLoginsMsg('');
+        if (f.solicitante) { setSolicitante(f.solicitante); setOutroOn(false); }
+        setNumero(f.numero || '');
+        setComment(f.comment || '');
+        setApprovalFiles([]);
+        approvalFilesRef.current = [];
+        setApprovalMsg('');
+        setAcordoManual('');
+        setSplitAsk(false);
+        setAvisoEnvio('');
+        setTrocas((l) => l.filter((x) => x.key !== t.key));
+        setTimeout(() => { const el = document.getElementById(f.otherOn ? 'ct-comentario' : 'ct-solicitacao'); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
+    };
+    function renderTrocas() {
+        if (trocas.length === 0) return null;
         const E = React.createElement;
-        return E("div", { className: "ct-retomado-nota" },
-            E("p", { className: "ct-retomado-t" }, 'Pedido retomado'),
-            E("p", null, 'Os prints e o comentário já foram enviados junto com o pedido: o validador vê tudo na página de aprovação. Não precisa anexar de novo. Se mudar alguma coisa no pedido, ele vira um pedido novo.'));
+        const nPend = trocas.filter((t) => t.status === 'pendente').length;
+        const nOk = trocas.filter((t) => t.status === 'aprovado' && !t.baixado).length;
+        const nErr = trocas.filter((t) => t.status === 'reprovado').length;
+        const hora = (ms) => { try { return new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
+        // o que pede ação vem primeiro (validada para baixar; reprovada, sem decisão ou não encontrada), depois as que aguardam
+        // e por último as já baixadas; dentro de cada grupo, a mais recente em cima
+        const peso = (t) => ((t.status === 'aprovado' && !t.baixado) ? 0 : (t.status === 'reprovado' || t.status === 'naoEncontrado' || t.status === 'semDecisao') ? 1 : t.status === 'pendente' ? 2 : 3);
+        const ordem = trocas.slice().sort((a, b) => (peso(a) - peso(b)) || (b.enviadoEm - a.enviadoEm));
+        const resumo = nOk ? { txt: nOk + (nOk > 1 ? ' para baixar' : ' para baixar'), tom: 'ok' } : nPend ? { txt: nPend + ' aguardando', tom: 'warn' } : nErr ? { txt: nErr + (nErr > 1 ? ' reprovadas' : ' reprovada'), tom: 'err' } : { txt: 'Concluídas', tom: 'mute' };
+        return E("section", { className: "ct-fila", "aria-label": "Trocas enviadas" },
+            E("div", { className: "ct-fila-h" },
+                E("div", { className: "min-w-0" },
+                    E("p", { className: "ct-kicker" }, "Trocas enviadas (" + trocas.length + ")"),
+                    E("p", { className: "ct-fila-s" }, "Ficam aqui até recarregar (F5) ou fechar a página.")),
+                pill(resumo)),
+            E("ul", { className: "ct-fila-lista" }, ordem.map((t) => {
+                const titulo = 'ID ' + (t.numero || '—') + ' · ' + (t.otherOn ? 'Outra matriz' + (t.otherName ? ' · ' + t.otherName : '') : (t.campNome || '—'));
+                const det = t.nLogins + (t.nLogins === 1 ? ' login' : ' logins') + (t.partes > 1 ? ' · ' + t.partes + ' partes' : '') + ' · enviado às ' + hora(t.enviadoEm) + (t.retomado ? ' · retomado' : '');
+                const st = t.status === 'aprovado' ? { cls: 'ok', txt: '✓ Validado por ' + (t.validador || '—') + (t.baixado ? ' · template baixado' : '') }
+                    : t.status === 'reprovado' ? { cls: 'err', txt: '✕ Reprovado por ' + (t.validador || '—') }
+                    : t.status === 'naoEncontrado' ? { cls: 'err', txt: 'O pedido não foi encontrado no Apps Script.' }
+                    : t.status === 'semDecisao' ? { cls: 'pend', txt: 'Ainda sem decisão. O pedido continua no Teams.' }
+                    : { cls: 'pend', txt: 'Aguardando validação' + (t.partes > 1 ? ' (' + (t.prog || 0) + '/' + t.partes + ' partes validadas)' : '') };
+                const podeTirar = t.status !== 'pendente' && !(t.status === 'aprovado' && !t.baixado);
+                return E("li", { key: t.key, className: 'ct-troca ct-troca-' + st.cls + (t.novidade ? ' ct-troca-nova' : ''), 'data-id': t.numero, 'data-status': t.status },
+                    E("div", { className: "ct-troca-top" },
+                        t.status === 'pendente' ? E("span", { className: "ct-spin ct-spin-dark" }) : null,
+                        E("p", { className: "ct-troca-n", title: titulo }, titulo),
+                        podeTirar && E("button", { type: "button", className: "ct-troca-x", 'aria-label': 'Tirar da lista', title: 'Tirar da lista', onClick: () => tirarTroca(t) }, '✕')),
+                    E("p", { className: "ct-troca-m" }, det),
+                    E("p", { className: "ct-troca-st" }, st.txt),
+                    t.status === 'reprovado' && t.motivo ? E("p", { className: "ct-troca-mot" }, 'Motivo: ' + t.motivo) : null,
+                    t.status === 'pendente' && t.acordo ? E("p", { className: "ct-troca-av" + (t.acordo.atencao ? ' warn' : '') }, t.acordo.resumo) : null,
+                    t.aviso ? E("p", { className: "ct-troca-av warn" }, t.aviso) : null,
+                    t.status === 'aprovado' && E("div", { className: "ct-troca-acoes" },
+                        E("button", { type: "button", className: (t.baixado ? "ct-btn-sec ct-btn-xs" : "ct-btn-primary") + " ct-troca-baixar", onClick: () => baixarTroca(t) },
+                            E(Download, { className: "w-3.5 h-3.5", strokeWidth: 2 }),
+                            t.baixado ? 'Baixar de novo' : (t.arquivos.length > 1 ? 'Baixar ' + t.arquivos.length + ' templates' : 'Baixar template'))),
+                    t.status === 'reprovado' && E("div", { className: "ct-troca-acoes" },
+                        E("button", { type: "button", className: "ct-btn-sec ct-btn-xs ct-troca-corrigir", onClick: () => corrigirTroca(t) }, 'Corrigir')),
+                    t.status === 'reprovado' && corrigirAviso === t.key ? E("p", { className: "ct-troca-av warn" }, 'O formulário tem outra troca em preenchimento. Clique em “Corrigir” de novo para trocar pelo pedido reprovado.') : null,
+                    t.status === 'semDecisao' && E("div", { className: "ct-troca-acoes" },
+                        E("button", { type: "button", className: "ct-btn-sec ct-btn-xs ct-troca-verificar", onClick: () => atualizarTroca(t.key, { status: 'pendente', inicio: Date.now() }) }, 'Verificar de novo')));
+            })));
     }
     // o que a leitura dos prints concluiu (fica no Comentário, logo abaixo dos avisos de print obrigatório)
     function renderLeitura() {
@@ -3282,7 +3421,7 @@ function SkillSwapTool() {
         const linhas = acordoRes.linhas;
         const tom = linhas.some((l) => l.tom === 'erro') ? 'erro' : (linhas.every((l) => l.tom === 'ok') ? 'ok' : 'aviso');
         const corLinha = { ok: BRAND.successText, aviso: '#7A4100', info: '#7A4100', erro: BRAND.errorText };
-        const travado = valState === 'sending' || valState === 'pending' || valState === 'approved';
+        const travado = valState === 'sending';
         return E("div", { className: 'ct-acordo ct-acordo-' + tom + ' mt-3 rounded-lg p-3 text-xs', style: CORES[tom] },
             E("p", { className: "font-semibold" }, 'Leitura do print'),
             linhas.map((l, i) => E("p", { key: i, className: 'ct-acordo-l ct-acordo-l-' + l.tom + ' mt-0.5' + (l.forte ? ' font-semibold' : ''), style: { color: corLinha[l.tom] } },
@@ -3347,7 +3486,8 @@ function SkillSwapTool() {
                     "Trocar")),
             loginsMsg && E("p", { className: "ct-logins-err text-xs mt-2", style: { color: BRAND.errorText } }, loginsMsg));
     }
-    const canDownload = canGenerate && reqOk && acordoOk && (!VALIDATION_REQUIRED || valState === 'approved');
+    // build 53: com a validação exigida, o template baixa no cartão da troca validada ("Trocas enviadas")
+    const canDownload = canGenerate && reqOk && acordoOk && !VALIDATION_REQUIRED;
     // monta o mesmo desenho da pré-visualização (login/skill/PRI + matriz de
     // origem, alinhados linha a linha) pra página de aprovação mostrar igual
     function buildDetalhes(rowsArg) {
@@ -3395,9 +3535,8 @@ function SkillSwapTool() {
             return;
         }
         const chunks = dividir ? chunkList(logins, SPLIT_SIZE) : [logins];
-        setValParts(chunks.length);
-        setValProg('');
         setValMsg('');
+        setAvisoEnvio('');
         setValState('sending');
         let solicFinal = solicitante.trim();
         // nome digitado em "Outros": arruma a escrita e guarda para a próxima vez (já existe na lista -> usa o da lista)
@@ -3413,7 +3552,6 @@ function SkillSwapTool() {
             setSolicitante(solicFinal);
             setOutroOn(false);
         }
-        valStart.current = Date.now();
         const ids = [];
         const avisos = [];
         // o resultado da leitura dos prints (ou o que o analista indicou) vai junto no pedido, para o validador
@@ -3459,109 +3597,111 @@ function SkillSwapTool() {
                 if (j.teamsErro) avisos.push((chunks.length > 1 ? 'parte ' + (k + 1) + ': ' : '') + 'o aviso no Teams falhou (' + j.teamsErro + '). Envie este link ao grupo: ' + j.link);
                 if (j.printErro) avisos.push('algum anexo do comentário não foi salvo (' + j.printErro + ')');
             }
-            setValId(ids.join(','));
-            setAcordoInfo(acordoEnvio ? { resumo: acordoRes.resumo, atencao: Boolean(acordoRes.atencao) } : null);
-            if (avisos.length) setValMsg('Atenção: o pedido foi registrado, mas ' + avisos.join(' · '));
-            valStart.current = Date.now();
-            setValState('pending');
+            // build 53: a troca vira um cartão em "Trocas enviadas" (com o template que foi para a validação) e o formulário
+            // limpa para a próxima (ficam a matriz e o nome do solicitante)
+            const chave = ids.join(',');
+            const agora = Date.now();
+            const rotulo = otherOn ? 'outra_matriz' : (selectedCampaign ? selectedCampaign.sheetName + '_' + selectedCampaign.name : campaign);
+            const nova = {
+                key: chave, ids: ids.slice(), numero: numero.replace(/\D/g, ''), otherOn: otherOn, otherName: otherTrim,
+                campNome: otherOn ? '' : (selectedCampaign ? selectedCampaign.name : campaignQuery), aba: otherOn ? '' : (selectedCampaign ? selectedCampaign.sheetName : ''),
+                nLogins: logins.length, partes: chunks.length, enviadoEm: agora, inicio: agora, status: 'pendente', prog: 0, validador: '', motivo: '',
+                arquivos: arquivosTemplate(logins, campaignSkills, numero, rotulo, chunks.length > 1), baixado: false,
+                acordo: acordoEnvio ? { resumo: acordoRes.resumo, atencao: Boolean(acordoRes.atencao) } : null,
+                aviso: avisos.length ? 'Atenção: o pedido foi registrado, mas ' + avisos.join(' · ') : '',
+                form: { otherOn: otherOn, otherName: otherName, otherSkillsRaw: otherSkillsRaw, campaign: campaign, campaignQuery: campaignQuery, origemQuery: origemQuery,
+                    origemNovatos: origemNovatos, origemRepasse: origemRepasse, loginsRaw: loginsRaw, solicitante: solicFinal, numero: numero, comment: comment },
+            };
+            setTrocas((l) => [nova].concat(l.filter((t) => t.key !== chave)));
             guardarPendente({ v: 1, ids: ids.join(','), parts: chunks.length, enviadoEm: Date.now(), numero, solicitante: solicFinal, loginsRaw, comment,
                 otherOn, otherName, otherSkillsRaw, campaign, campaignQuery, campNome: selectedCampaign ? selectedCampaign.name : '',
                 aba: selectedCampaign ? selectedCampaign.sheetName : '', origemQuery, origemNovatos, origemRepasse, arquivo: meta ? meta.fileName : '',
                 nLogins: logins.length, impressao: impressaoTemplate(logins, campaignSkills),
                 acordoInfo: acordoEnvio ? { resumo: acordoRes.resumo, atencao: Boolean(acordoRes.atencao) } : null });
             setPendentes(lerPendentes());
+            const idTxt = numero.replace(/\D/g, '');
+            limparFormulario();
+            setValState('idle');
+            setAvisoEnvio((chunks.length > 1 ? chunks.length + ' pedidos do ID ' + idTxt + ' enviados' : 'Pedido do ID ' + idTxt + ' enviado') + ' ao grupo do Teams. Acompanhe em “Trocas enviadas”' + (window.matchMedia && window.matchMedia('(min-width:1180px)').matches ? ', aqui em cima.' : '.'));
         } catch (err) {
             setValState('error');
             setValMsg((ids.length ? 'Enviei ' + ids.length + ' de ' + chunks.length + ' pedidos antes do erro — os já enviados estão no Teams, confira antes de reenviar. ' : '') + (err && err.servidor ? String(err.message) : 'Não consegui enviar o pedido (' + ((err && err.message) || err) + '). Confira a URL, a rede/firewall e se a implantação do Apps Script está como "Qualquer pessoa".'));
         }
     };
-    const novaSolicitacao = () => {
-        setRetomado(null);
-        setValState('idle');
-        setValId('');
-        setValWho('');setValMotivo('');
-        setValMsg('');
-    };
-    const verificarDeNovo = () => {
-        valStart.current = Date.now();
-        setValState('pending');
-    };
-    // enquanto o pedido está pendente, pergunta ao Apps Script de tempos em tempos (intervaloStatus: 5 s no começo,
-    // espaçando depois); com a aba escondida não pergunta, e pergunta na hora em que a aba volta a aparecer
+    // build 53: acompanha todas as trocas pendentes. Cada uma pergunta no ritmo de antes (intervaloStatus: 5 s no começo,
+    // espaçando depois); com a aba escondida não pergunta, e pergunta na hora em que a aba volta a aparecer.
+    const temPendente = trocas.some((t) => t.status === 'pendente');
     useEffect(() => {
-        if (valState !== 'pending' || !valId) return;
+        if (!temPendente) return;
         let stop = false, timer = null, ocupado = false;
-        const ids = valId.split(',').filter(Boolean);
-        const agendar = () => {
-            clearTimeout(timer);
-            if (!stop) timer = setTimeout(tick, intervaloStatus(Date.now() - valStart.current));
-        };
-        const tick = async () => {
-            if (stop) return;
-            if (document.hidden) { agendar(); return; }
-            if (ocupado) return;
-            ocupado = true;
+        const proxima = {};   // chave da troca -> quando perguntar de novo
+        const consultar = async (t) => {
             try {
-                if (await consultar()) return;   // decidiu (aprovado, reprovado ou não encontrado): para de perguntar
-            } finally {
-                ocupado = false;
-            }
-            if (stop) return;
-            if (Date.now() - valStart.current > VALIDATION_TIMEOUT_MS) { setValState('timeout'); return; }
-            agendar();
-        };
-        const aoVoltar = () => { if (!document.hidden && !stop) { clearTimeout(timer); tick(); } };
-        // devolve true quando chegou a uma decisão
-        const consultar = async () => {
-            try {
-                const res = await Promise.all(ids.map(async (id) => {
+                const res = await Promise.all(t.ids.map(async (id) => {
                     const r = await fetch(VALIDATION_URL + '?action=status&id=' + encodeURIComponent(id), { cache: 'no-store' });
                     return r.json();
                 }));
-                if (stop) return true;
+                if (stop) return;
                 const iRej = res.findIndex((j) => j.status === 'REPROVADO');
                 if (iRej >= 0) {
                     const j = res[iRej];
-                    const motivo = (ids.length > 1 ? 'Parte ' + (iRej + 1) + '/' + ids.length + ': ' : '') + (j.motivo || '');
-                    setValWho(j.validador || '');
-                    setValState('rejected');
-                    setValMotivo(motivo);
-                    setPopup({ tipo: 'rejected', nome: j.validador || '', motivo: motivo });
-                    tirarPendente(ids.join(','));
+                    atualizarTroca(t.key, { status: 'reprovado', validador: j.validador || '', motivo: (t.ids.length > 1 ? 'Parte ' + (iRej + 1) + '/' + t.ids.length + ': ' : '') + (j.motivo || ''), novidade: true });
+                    tirarPendente(t.key);
                     setPendentes(lerPendentes());
-                    return true;
+                    return;
                 }
                 if (res.some((j) => j.status === 'NAO_ENCONTRADO')) {
-                    setValMsg('O pedido não foi encontrado no Apps Script.');
-                    tirarPendente(ids.join(','));
+                    atualizarTroca(t.key, { status: 'naoEncontrado', novidade: true });
+                    tirarPendente(t.key);
                     setPendentes(lerPendentes());
-                    setValState('error');
-                    return true;
+                    return;
                 }
                 const apr = res.filter((j) => j.status === 'APROVADO');
-                if (apr.length === ids.length) {
+                if (apr.length === t.ids.length) {
                     const quem = Array.from(new Set(apr.map((j) => j.validador || '').filter(Boolean))).join(' / ');
-                    setValWho(quem);
-                    setValState('approved');
-                    setPopup({ tipo: 'approved', nome: quem });
-                    marcarPendente(ids.join(','), { aprovadoPor: quem || '—' });
+                    atualizarTroca(t.key, { status: 'aprovado', validador: quem, novidade: true });
+                    marcarPendente(t.key, { aprovadoPor: quem || '—' });
                     setPendentes(lerPendentes());
-                    return true;
+                    return;
                 }
-                setValProg(ids.length > 1 ? apr.length + '/' + ids.length + ' pedidos validados' : '');
+                if (apr.length !== (t.prog || 0)) atualizarTroca(t.key, { prog: apr.length });
             } catch (err) {
                 // falha momentânea de rede: tenta de novo no próximo ciclo
             }
-            return false;
+        };
+        const tick = async () => {
+            if (stop) return;
+            if (!document.hidden && !ocupado) {
+                ocupado = true;
+                try {
+                    const agora = Date.now();
+                    const vez = trocasRef.current.filter((t) => t.status === 'pendente' && agora >= (proxima[t.key] || 0));
+                    for (const t of vez) {
+                        if (stop) break;
+                        if (agora - t.inicio > VALIDATION_TIMEOUT_MS) { atualizarTroca(t.key, { status: 'semDecisao' }); continue; }
+                        proxima[t.key] = agora + intervaloStatus(agora - t.inicio);
+                        await consultar(t);
+                    }
+                } finally {
+                    ocupado = false;
+                }
+            }
+            if (!stop) timer = setTimeout(tick, 1000);
+        };
+        const aoVoltar = () => {
+            if (document.hidden || stop) return;
+            Object.keys(proxima).forEach((k) => { proxima[k] = 0; });
+            clearTimeout(timer);
+            tick();
         };
         document.addEventListener('visibilitychange', aoVoltar);
         tick();
         return () => { stop = true; clearTimeout(timer); document.removeEventListener('visibilitychange', aoVoltar); };
-    }, [valState, valId]);
+    }, [temPendente]);
     // Nº do ID: campo do passo 3 (Solicitação)
     function renderIdField(compact) {
         const E = React.createElement;
-        const busy = valState === 'sending' || valState === 'pending';
+        const busy = valState === 'sending';
         return E("div", { className: compact ? "" : "mt-3" },
             E("label", { className: "ct-label" }, "Nº do ID"),
             E("input", { type: "text", value: numero, onChange: (e) => setNumero(e.target.value.replace(/\D/g, '')), inputMode: "numeric", disabled: busy, placeholder: "Ex.: 12345", autoComplete: "off", className: "ct-input w-full rounded-lg px-3 py-2.5 text-sm mt-1.5", style: { color: BRAND.dark } }),
@@ -3570,29 +3710,17 @@ function SkillSwapTool() {
     // botão "Solicitar validação" + situação do pedido (painel "Resumo da troca")
     function renderValidation() {
         const E = React.createElement;
-        const busy = valState === 'sending' || valState === 'pending';
-        const canRequest = canGenerate && reqOk && acordoOk && chamadoLink(numero) !== '' && solicitante.trim() !== '' && !busy && valState !== 'approved';
-        const spinner = busy ? E("span", { className: "ct-spin" }) : (valState === 'approved' ? E(Check, { className: "w-4 h-4", strokeWidth: 2.5 }) : null);
-        const label = valState === 'sending' ? 'Enviando pedido...'
-            : valState === 'pending' ? 'Aguardando validação...'
-            : valState === 'approved' ? 'Validado'
-            : 'Solicitar validação';
+        const busy = valState === 'sending';
+        const canRequest = canGenerate && reqOk && acordoOk && chamadoLink(numero) !== '' && solicitante.trim() !== '' && !busy;
+        const spinner = busy ? E("span", { className: "ct-spin" }) : null;
+        const label = busy ? 'Enviando pedido...' : 'Solicitar validação';
         let status = null;
-        if (valState === 'pending')
-            status = E("div", null,
-                E("p", { className: "text-xs mt-2", style: { color: '#4E5662' } }, (valParts > 1 ? valParts + ' pedidos enviados ao grupo do Teams' + (valProg ? ' (' + valProg + ')' : '') + '. ' : 'Pedido enviado ao grupo do Teams. ') + 'Esta tela libera sozinha quando ' + (valParts > 1 ? 'todos forem aprovados.' : 'alguém aprovar.')),
-                acordoInfo && E("p", { className: "ct-acordo-pend text-xs mt-1", style: { color: acordoInfo.atencao ? '#8F4E00' : '#4E5662' } }, acordoInfo.resumo),
-                valMsg && E("p", { className: "text-xs mt-1 break-all", style: { color: '#8F4E00' } }, valMsg));
-        else if (valState === 'approved')
-            status = E("p", { className: "text-xs mt-2 font-medium", style: { color: BRAND.successText } }, '✓ Validado por ' + (valWho || '—') + '. Download liberado aqui embaixo.');
-        else if (valState === 'rejected')
-            status = E("p", { className: "text-xs mt-2", style: { color: BRAND.errorText } }, 'Reprovado por ' + (valWho || '—') + (valMotivo ? ' — motivo: ' + valMotivo : '') + '. Ajuste a solicitação e peça uma nova validação. ',
-                E("button", { onClick: novaSolicitacao, className: "underline" }, 'novo pedido'));
-        else if (valState === 'timeout')
-            status = E("p", { className: "text-xs mt-2", style: { color: '#8F4E00' } }, 'Ainda sem decisão. O pedido continua pendente no Teams. ',
-                E("button", { onClick: verificarDeNovo, className: "underline" }, 'verificar de novo'));
+        if (valState === 'sending')
+            status = E("p", { className: "text-xs mt-2", style: { color: '#4E5662' } }, 'Enviando o pedido ao grupo do Teams…');
         else if (valState === 'error')
-            status = E("p", { className: "text-xs mt-2", style: { color: BRAND.errorText } }, valMsg || 'Algo deu errado ao validar.');
+            status = E("p", { className: "text-xs mt-2", style: { color: BRAND.errorText } }, valMsg || 'Algo deu errado ao enviar o pedido.');
+        else if (avisoEnvio)
+            status = E("p", { className: "ct-envio-ok text-xs mt-2 font-medium", style: { color: BRAND.successText } }, '✓ ' + avisoEnvio);
         else if (otherOn && !canGenerate)
             status = E("p", { className: "text-xs mt-2", style: { color: '#737B87' } }, 'Cole os logins e as skills (uma por linha) para pedir a validação.');
         else if (canGenerate && !origemOk)
@@ -3615,29 +3743,14 @@ function SkillSwapTool() {
             status = E("p", { className: "text-xs mt-2", style: { color: '#737B87' } }, !chamadoLink(numero) ? 'Informe o nº do ID do chamado para pedir a validação.' : 'Informe o nome do solicitante para pedir a validação.');
         return E("div", { className: "ct-val" },
             E("div", { className: "ct-val-btn flex" },
-                E("button", { onClick: () => solicitarValidacao(), disabled: !canRequest, className: "ct-btn-primary" + (valState === 'approved' ? " ct-btn-ok" : "") + " w-full flex items-center justify-center gap-2 text-white px-4 py-3 rounded-lg text-sm font-semibold disabled:cursor-not-allowed" }, spinner, label)),
+                E("button", { onClick: () => solicitarValidacao(), disabled: !canRequest, className: "ct-btn-primary w-full flex items-center justify-center gap-2 text-white px-4 py-3 rounded-lg text-sm font-semibold disabled:cursor-not-allowed" }, spinner, label)),
             status);
     }
-    function renderPopup() {
-        if (!popup) return null;
-        const E = React.createElement;
-        const ok = popup.tipo === 'approved';
-        // build 46: na validação aprovada, o OK já baixa o(s) template(s), igual ao botão "Baixar template" (que continua no
-        // painel). Fechar clicando fora do quadro só fecha: o download fica para o botão.
-        const baixaNoOk = ok && canDownload;
-        const fecharOk = () => { setPopup(null); if (baixaNoOk) handleDownload(); };
-        return E("div", { className: "ct-modal-bg", onClick: () => setPopup(null) },
-            E("div", { className: "ct-modal", onClick: (e) => e.stopPropagation(), role: "dialog" },
-                E("div", { className: "ct-modal-ico", style: { backgroundColor: ok ? BRAND.successBg : BRAND.errorBg, color: ok ? BRAND.success : BRAND.errorText } }, ok ? '\u2713' : '\u2715'),
-                E("p", { className: "text-base font-bold mt-3", style: { color: BRAND.dark } }, ok ? 'Solicitação validada' : 'Solicitação reprovada'),
-                E("p", { className: "text-sm mt-1", style: { color: '#4E5662' } }, (ok ? 'Validado por ' : 'Reprovado por ') + (popup.nome || '—') + (ok ? (baixaNoOk ? (valParts > 1 ? '. Clique em OK para baixar os ' + valParts + ' templates.' : '. Clique em OK para baixar o template.') : (valParts > 1 ? '. O download dos ' + valParts + ' templates foi liberado.' : '. O download do template foi liberado.')) : (VALIDATION_REQUIRED ? '. O download continua bloqueado.' : '. Ajuste a solicitação antes de usar o template.'))),
-                (!ok && popup.motivo) ? E("div", { className: "text-sm mt-3 text-left rounded-lg p-3", style: { backgroundColor: BRAND.errorBg, border: '1px solid ' + BRAND.errorBorder, color: BRAND.errorText, whiteSpace: 'pre-wrap', wordBreak: 'break-word' } }, E("p", { className: "text-xs font-semibold uppercase tracking-wide mb-1" }, 'Onde errou'), popup.motivo) : null,
-                E("button", { onClick: fecharOk, className: "ct-btn-primary ct-modal-ok text-white px-5 py-2 rounded-lg text-sm font-semibold mt-4" }, 'OK')));
-    }
-    // "F5" do Comentário para baixo: limpa tudo menos a matriz carregada (passo 1)
-    const resetRequest = () => {
-        setRetomado(null);
+    // "F5" do Comentário para baixo: limpa tudo menos a matriz carregada (passo 1) e, no build 53, o nome do solicitante
+    // (o mesmo analista costuma mandar várias trocas seguidas)
+    const limparFormulario = () => {
         setRetomarErro({});
+        setCorrigirAviso('');
         setComment('');
         setApprovalFiles([]);
         approvalFilesRef.current = [];
@@ -3646,7 +3759,6 @@ function SkillSwapTool() {
         setLoginsRaw('');
         setLoginsFile(null);
         setLoginsMsg('');
-        setSolicitante('');
         setCampaignQuery('');
         setCampaign('');
         lastPicked.current = { query: '', key: '' };
@@ -3657,62 +3769,18 @@ function SkillSwapTool() {
         setShowOrigemSug(false);
         setNumero('');
         setValState('idle');
-        setValId('');
-        setValWho('');
-        setValMotivo('');
         setValMsg('');
-        setPopup(null);
-        setValParts(1);
-        setValProg('');
         setSplitAsk(false);
         setOtherOn(false);
         setOtherName('');
         setOtherSkillsRaw('');
         setAcordoManual('');
-        setAcordoInfo(null);
     };
     const handleDownload = () => {
-        if (!reqOk || !acordoOk) return;
-        if (VALIDATION_REQUIRED && valState !== 'approved') return;
-        // Separador fixo em ";" e sem BOM — é o formato que a ferramenta de
-        // importação precisa (BOM insere um caractere invisível antes de
-        // "Login" que quebra a validação de cabeçalho).
-        const header = ['Login', 'Skill', 'Proficiencia'].join(';');
-        const chunks = valParts > 1 ? chunkList(logins, SPLIT_SIZE) : [logins];
-        const label = otherOn ? 'outra_matriz' : (selectedCampaign ? selectedCampaign.sheetName + '_' + selectedCampaign.name : campaign);
-        const safeName = label
-            .replace(/[^a-z0-9]+/gi, '_')
-            .replace(/^_+|_+$/g, '')
-            .slice(0, 60);
-        const idArq = String(numero || '').replace(/\D/g, '');
-        // o título do arquivo baixado é o número do ID (ex.: 39900.csv); dividido: 39900_parte1de2.csv
-        const base = idArq || ('template_agentes_' + safeName);
-        const nomes = [];
-        chunks.forEach((part, k) => {
-            // login sem skill vira só o login (sem ";;" no fim); skill sem login mantém o ";" do começo
-            // porque as colunas Login e Skill são listas independentes e as skills que sobram precisam ir
-            const lines = rowsFor(part).map((r) => (r.login && !r.skill && !r.prof) ? r.login : [r.login, r.skill, r.prof].join(';'));
-            const csv = [header, ...lines].join('\r\n');
-            const nomeArq = base + (chunks.length > 1 ? '_parte' + (k + 1) + 'de' + chunks.length : '') + '.csv';
-            nomes.push(nomeArq);
-            // vários arquivos: espaça os downloads para o navegador não barrar
-            setTimeout(() => {
-                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = nomeArq;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                setTimeout(() => URL.revokeObjectURL(url), 1500);
-            }, k * 400);
-        });
-        // depois de baixar, a tela volta ao zero (do Comentário para baixo) para a próxima solicitação
-        tirarPendente(valId);
-        setPendentes(lerPendentes());
-        resetRequest();
-        setLastDownload((nomes.length > 1 ? 'Templates baixados: ' + nomes.join(', ') : 'Template baixado: ' + nomes[0]) + '. Os campos do coment\u00E1rio para baixo foram reiniciados.');
+        if (!canDownload) return;
+        const rotulo = otherOn ? 'outra_matriz' : (selectedCampaign ? selectedCampaign.sheetName + '_' + selectedCampaign.name : campaign);
+        baixarArquivos(arquivosTemplate(logins, campaignSkills, numero, rotulo, false));
+        limparFormulario();
     };
     const resetMatrix = () => {
         setMatrix(null);
@@ -3735,10 +3803,7 @@ function SkillSwapTool() {
     // ---- visual (build 40/41): etiquetas dos cartões e painel "Resumo da troca" ----
     const printObrig = !otherOn && (printNeeded || isS2SCampaign);
     const comentFeito = approvalFiles.length > 0 || comment.trim() !== '';
-    const valTag = (valState === 'sending' || valState === 'pending') ? { txt: 'Em validação', tom: 'warn' }
-        : valState === 'approved' ? { txt: 'Validada', tom: 'ok' }
-        : valState === 'rejected' ? { txt: 'Reprovada', tom: 'err' }
-        : valState === 'timeout' ? { txt: 'Sem decisão', tom: 'warn' }
+    const valTag = valState === 'sending' ? { txt: 'Enviando…', tom: 'warn' }
         : valState === 'error' ? { txt: 'Erro no envio', tom: 'err' }
         : null;
     // a leitura do print manda na etiqueta: lendo, barrado ou faltando algo aparece antes de "Print anexado"
@@ -3747,16 +3812,15 @@ function SkillSwapTool() {
         : acordoRes.barrado ? { txt: 'Print barrado', tom: 'err' }
         : !acordoOk ? { txt: 'Confira a leitura', tom: 'warn' }
         : null;
-    const comentTag = retomadoAtivo ? { txt: 'Enviado com o pedido', tom: 'ok' } : leituraTag || (printObrig ? ((printOk && s2sOk) ? { txt: 'Print anexado', tom: 'ok' } : { txt: 'Print obrigatório', tom: 'warn' }) : (comentFeito ? null : { txt: 'Opcional', tom: 'mute' }));
+    const comentTag = leituraTag || (printObrig ? ((printOk && s2sOk) ? { txt: 'Print anexado', tom: 'ok' } : { txt: 'Print obrigatório', tom: 'warn' }) : (comentFeito ? null : { txt: 'Opcional', tom: 'mute' }));
     const pill = (t) => t ? React.createElement("span", { className: "ct-pill ct-pill-" + t.tom }, t.txt) : null;
     const pillComent = pill(comentTag);
     const pillPrevia = rows.length > 0 ? pill({ txt: logins.length + (logins.length === 1 ? ' login' : ' logins') + ' · ' + campaignSkills.length + (campaignSkills.length === 1 ? ' skill' : ' skills'), tom: 'mute' }) : null;
     const idArqTela = String(numero || '').replace(/\D/g, '');
-    const nomeArquivo = (idArqTela || 'template_agentes') + (valParts > 1 ? ' (' + valParts + ' arquivos)' : '.csv');
+    const nomeArquivo = (idArqTela || 'template_agentes') + '.csv';
     const passoSol = otherOn ? 2 : 3;
     function renderPainel() {
         const E = React.createElement;
-        const busy = valState === 'sending' || valState === 'pending';
         const nSkills = campaignSkills.length;
         const prontoParaPedir = canGenerate && reqOk && acordoOk && chamadoLink(numero) !== '' && solicitante.trim() !== '';
         const situacao = valTag || (prontoParaPedir ? { txt: 'Pronta para validar', tom: 'claro' } : { txt: 'Em preenchimento', tom: 'mute' });
@@ -3780,8 +3844,7 @@ function SkillSwapTool() {
                 : { tom: 'off', t: 'Campanha de origem', s: 'Informe no passo 3 (ou marque “Novatos” ou “Repasse”)' });
         if (printObrig) {
             const precisa = isS2SCampaign ? s2sMin : 1;
-            itens.push(retomadoAtivo ? { tom: 'ok', t: 'Print do “de acordo”', s: 'Enviado junto com o pedido' }
-                : (printOk && s2sOk) ? { tom: 'ok', t: 'Print do “de acordo”', s: Math.min(imgCount, precisa) + '/' + precisa + (precisa > 1 ? ' anexados' : ' anexado') }
+            itens.push((printOk && s2sOk) ? { tom: 'ok', t: 'Print do “de acordo”', s: Math.min(imgCount, precisa) + '/' + precisa + (precisa > 1 ? ' anexados' : ' anexado') }
                 : { tom: 'warn', t: 'Print do “de acordo”', s: 'Obrigatório: ' + Math.min(imgCount, precisa) + '/' + precisa + ' no passo 2' });
         }
         if (precisaLer)
@@ -3793,10 +3856,7 @@ function SkillSwapTool() {
         const temId = chamadoLink(numero) !== '';
         itens.push((temSol && temId) ? { tom: 'ok', t: 'Solicitante e Nº do ID', s: solicitante.trim() + ' · ID ' + idArqTela }
             : { tom: 'off', t: 'Solicitante e Nº do ID', s: (!temSol && !temId ? 'Preencha os dois' : !temSol ? 'Falta o nome do solicitante' : 'Falta o Nº do ID') + ' no passo ' + passoSol });
-        itens.push(valState === 'approved' ? { tom: 'ok', t: 'Validação no Teams', s: 'Validada por ' + (valWho || '—') }
-            : valState === 'rejected' ? { tom: 'err', t: 'Validação no Teams', s: 'Reprovada por ' + (valWho || '—') }
-            : busy ? { tom: 'wait', t: 'Validação no Teams', s: valState === 'sending' ? 'Enviando o pedido…' : (valParts > 1 ? 'Aguardando ' + valParts + ' aprovações' : 'Aguardando a aprovação') }
-            : valState === 'timeout' ? { tom: 'warn', t: 'Validação no Teams', s: 'Ainda sem decisão' }
+        itens.push(valState === 'sending' ? { tom: 'wait', t: 'Validação no Teams', s: 'Enviando o pedido…' }
             : valState === 'error' ? { tom: 'err', t: 'Validação no Teams', s: 'O pedido não foi enviado' }
             : { tom: 'off', t: 'Validação no Teams', s: prontoParaPedir ? 'Tudo pronto: clique em Solicitar validação' : 'Libera quando os itens acima estiverem ok' });
         return E("div", { className: "ct-panel" },
@@ -3819,11 +3879,12 @@ function SkillSwapTool() {
                         it.s ? E("p", { className: "ct-chk-s" }, it.s) : null))))),
             E("div", { className: "ct-panel-b ct-act" },
                 renderValidation(),
-                E("div", { className: "ct-dl" },
+                VALIDATION_REQUIRED
+                    ? E("p", { className: "ct-dl-nota text-xs", style: { color: '#5F6773' } }, 'Depois de validada, a troca fica em “Trocas enviadas” com o botão Baixar template.')
+                    : E("div", { className: "ct-dl" },
                     E("button", { onClick: handleDownload, disabled: !canDownload, className: "ct-btn-primary w-full flex items-center gap-2 justify-center text-white px-4 py-3 rounded-lg text-sm font-semibold disabled:cursor-not-allowed" },
                         E(Download, { className: "w-4 h-4", strokeWidth: 2 }),
-                        valParts > 1 ? "Baixar " + valParts + " templates (.csv)" : "Baixar template_agentes.csv"),
-                    lastDownload && E("p", { className: "text-xs mt-2.5 font-medium", style: { color: BRAND.successText } }, '✓ ' + lastDownload),
+                        "Baixar template_agentes.csv"),
                     !canGenerate && E("p", { className: "text-xs mt-2.5", style: { color: '#737B87' } }, (otherOn ? "Cole os logins e as skills primeiro." : "Carregue a matriz, cole os logins e digite a campanha primeiro.")),
                     canGenerate && !canDownload && E("p", { className: "text-xs mt-2.5", style: { color: (origemOk && s2sOk && printOk && otherOk && acordoOk) ? '#737B87' : '#8F4E00' } }, !origemOk ? "Download bloqueado: informe a campanha de origem no passo 3 (ou marque “Novatos” ou “Repasse”)." : !s2sOk ? "Download bloqueado: " + (isS2SDestino ? "campanha S2S" : "campanha de origem S2S") + " exige " + s2sPrints(s2sMin) + " do “de acordo” no passo 2 (" + imgCount + "/" + s2sMin + ")." : !printOk ? "Download bloqueado: mais de " + LOGINS_PRINT_MIN + " logins exige pelo menos 1 print no passo 2 (" + imgCount + "/1)." : !otherOk ? "Download bloqueado: informe qual é a outra matriz (não vale ALM, TEL ou AEC)." : !acordoOk ? "Download bloqueado: veja o aviso da leitura do print no passo 2." : "O download libera quando a validação for aprovada."))));
     }
@@ -4000,12 +4061,12 @@ function SkillSwapTool() {
                         React.createElement(AlertTriangle, { className: "w-4 h-4 mt-0.5 flex-shrink-0", strokeWidth: 1.75 }),
                         React.createElement("span", null, approvalMsg))),
                     React.createElement("p", { className: "text-xs mt-3", style: { color: '#4E5662' } }, "Use este campo para colocar cards de retorno, prints de e-mails \u201Cde acordo\u201D etc."),
-                    !retomadoAtivo && printNeeded && React.createElement("div", { className: "ct-print-warn mt-3 rounded-lg p-3 text-xs", style: printOk ? { backgroundColor: BRAND.successBg, border: '1px solid ' + BRAND.successBorder, color: BRAND.successText } : { backgroundColor: '#FFF7EB', border: '1px solid #F2DBAE', color: '#8F4E00' } },
+                    printNeeded && React.createElement("div", { className: "ct-print-warn mt-3 rounded-lg p-3 text-xs", style: printOk ? { backgroundColor: BRAND.successBg, border: '1px solid ' + BRAND.successBorder, color: BRAND.successText } : { backgroundColor: '#FFF7EB', border: '1px solid #F2DBAE', color: '#8F4E00' } },
                         React.createElement("p", { className: "font-semibold" }, (printOk ? '\u2713 ' : '') + 'Mais de ' + LOGINS_PRINT_MIN + ' logins (' + logins.length + '): \u00E9 obrigat\u00F3rio pelo menos 1 print (imagem) \u2014 ' + Math.min(imgCount, 1) + '/1 anexado.')),
-                    !retomadoAtivo && isS2SCampaign && React.createElement("div", { className: "mt-3 rounded-lg p-3 text-xs", style: s2sOk ? { backgroundColor: BRAND.successBg, border: '1px solid ' + BRAND.successBorder, color: BRAND.successText } : { backgroundColor: '#FFF7EB', border: '1px solid #F2DBAE', color: '#8F4E00' } },
+                    isS2SCampaign && React.createElement("div", { className: "mt-3 rounded-lg p-3 text-xs", style: s2sOk ? { backgroundColor: BRAND.successBg, border: '1px solid ' + BRAND.successBorder, color: BRAND.successText } : { backgroundColor: '#FFF7EB', border: '1px solid #F2DBAE', color: '#8F4E00' } },
                         React.createElement("p", { className: "font-semibold" }, (s2sOk ? '\u2713 ' : '') + s2sRotulo + ': ' + (s2sMin === 1 ? '\u00E9 obrigat\u00F3rio 1 print (imagem)' : 's\u00E3o obrigat\u00F3rios ' + s2sMin + ' prints (imagens)') + ' com o \u201Cde acordo\u201D por e-mail \u2014 ' + imgCount + '/' + s2sMin + ' anexados.'),
                         React.createElement("p", { className: "mt-0.5" }, (s2sMin === 1 ? 'Tem mais de uma aprova\u00E7\u00E3o? Junte tudo em um print s\u00F3, com a tela dividida.' : 'Tem mais de duas aprova\u00E7\u00F5es? Junte tudo em um print s\u00F3, com a tela dividida.'))),
-                    retomadoAtivo ? renderNotaRetomado() : renderLeitura()),
+                    renderLeitura()),
                 React.createElement("section", { id: "ct-solicitacao", className: 'ct-card transition-opacity ' + (!matrix && !otherOn ? 'opacity-40 pointer-events-none' : '') },
                     React.createElement(StepHeader, { n: otherOn ? 2 : 3, label: "Solicita\u00E7\u00E3o", done: canGenerate, desc: otherOn ? "Logins, skills, solicitante e o Nº do ID do chamado." : "Logins, campanhas de origem e destino, solicitante e o Nº do ID do chamado." }),
                     otherOn ? renderOtherSolicitation() : (React.createElement("div", { className: "mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 ct-step2-grid" },
@@ -4036,7 +4097,7 @@ function SkillSwapTool() {
                                 origemSem ? React.createElement("p", { className: "ct-origem-livre text-xs mt-1.5", style: { color: '#4E5662' } },
                                     (origemNovatos ? 'Novatos' : 'Repasse') + ': não precisa do “de acordo”' +
                                     (isS2SDestino ? ' (a campanha destino é S2S: o print do “de acordo” continua obrigatório).' : '.')) : null,
-                                origemS2S && !retomadoAtivo ? React.createElement("p", { className: "ct-origem-s2s text-xs mt-1.5", style: { color: '#8F4E00' } }, "Origem S2S: precisa do print do “de acordo” no passo 2, como na campanha S2S.") : null),
+                                origemS2S ? React.createElement("p", { className: "ct-origem-s2s text-xs mt-1.5", style: { color: '#8F4E00' } }, "Origem S2S: precisa do print do “de acordo” no passo 2, como na campanha S2S.") : null),
                             !otherOn && React.createElement("div", null, React.createElement("label", { className: "ct-label" }, "Campanha destino"),
                             React.createElement("div", { className: "relative mt-1.5" },
                                 React.createElement(Search, { className: "w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none", style: { color: '#9AA1AB' }, strokeWidth: 1.75 }),
@@ -4055,11 +4116,11 @@ function SkillSwapTool() {
                     React.createElement(StepHeader, { n: 4, label: "Pré-visualização", done: rows.length > 0, extra: pillPrevia, desc: "Confira o template linha a linha, ao lado da matriz de origem." }),
                     React.createElement(PreviewGrid, { rows: rows, blocks: annotatedBlocks, campaign: selectedCampaign, generatedCount: campaignSkills.length, arquivo: nomeArquivo })),
                 null),
-                React.createElement("aside", { className: "ct-aside", "aria-label": "Resumo da troca" }, renderPainel())),
+                React.createElement("aside", { className: "ct-aside", "aria-label": "Resumo da troca" },
+                    React.createElement("div", { className: "ct-aside-in" }, renderTrocas(), renderPainel()))),
             React.createElement("footer", { className: "ct-foot" },
                 React.createElement("span", null, "Centro Tático · Automação de troca de skills"),
                 React.createElement("span", { className: "ct-foot-v" }, BUILD_VERSION))),
-        renderPopup(),
         renderSplitAsk()));
 }
 const root = ReactDOM.createRoot(document.getElementById('root'));
