@@ -429,7 +429,7 @@ const BRAND = {
 // no rodapé só pra dar pra conferir rapidinho, num piscar de olhos, se
 // duas cópias do arquivo (por exemplo um download antigo x um novo) são
 // a mesma versão ou não, sem precisar comparar comportamento na mão.
-const BUILD_VERSION = 'build 54';
+const BUILD_VERSION = 'build 55';
 // Analistas que aparecem na lista "Nome do solicitante" (nome e sobrenome, como estão na planilha de pedidos).
 // Chegou analista novo? É só acrescentar o nome aqui (a lista é mostrada em ordem alfabética).
 const ANALISTAS = [
@@ -2756,6 +2756,8 @@ function SkillSwapTool() {
     const trocasRef = useRef([]);
     trocasRef.current = trocas;
     const [corrigirAviso, setCorrigirAviso] = useState('');
+    // build 55: pop-ups de aviso das decisões (validada / reprovada), um de cada vez
+    const [avisosDecisao, setAvisosDecisao] = useState([]);
     // build 43: pedidos aguardando validação guardados no navegador (aviso "Retomar")
     const [pendentes, setPendentes] = useState(() => lerPendentes());
     const [retomarErro, setRetomarErro] = useState({});
@@ -3237,6 +3239,10 @@ function SkillSwapTool() {
     }
     // build 53: muda uma troca da lista (por chave)
     const atualizarTroca = (key, mud) => setTrocas((l) => l.map((t) => (t.key === key ? Object.assign({}, t, typeof mud === 'function' ? mud(t) : mud) : t)));
+    // build 55: avisa (pop-up) que a troca foi validada ou reprovada. A mesma decisão não entra duas vezes.
+    const avisarDecisao = (t, extra) => setAvisosDecisao((l) => (l.some((a) => a.key === t.key && a.tipo === extra.tipo) ? l : l.concat([Object.assign({
+        key: t.key, numero: t.numero, arquivos: (t.arquivos || []).length,
+        titulo: t.otherOn ? 'Outra matriz' + (t.otherName ? ' · ' + t.otherName : '') : (t.campNome || '—') }, extra)])));
     // build 43 + 53: retoma um pedido guardado no navegador: ele volta para "Trocas enviadas" e a tela volta a acompanhar
     // a validação (o formulário não muda). O template é montado de novo com a matriz carregada e conferido pela impressão.
     const retomarPedido = (p) => {
@@ -3351,6 +3357,26 @@ function SkillSwapTool() {
         setTrocas((l) => l.filter((x) => x.key !== t.key));
         setTimeout(() => { const el = document.getElementById(f.otherOn ? 'ct-comentario' : 'ct-solicitacao'); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
     };
+    // build 55: pop-up de aviso da decisão (só avisa: o OK fecha; o template continua no cartão da troca)
+    function renderAvisoDecisao() {
+        if (avisosDecisao.length === 0) return null;
+        const E = React.createElement;
+        const a = avisosDecisao[0];
+        const ok = a.tipo === 'aprovado';
+        const fechar = () => setAvisosDecisao((l) => l.slice(1));
+        const mais = avisosDecisao.length - 1;
+        return E("div", { className: "ct-modal-bg ct-aviso-decisao", onClick: fechar },
+            E("div", { className: "ct-modal", onClick: (e) => e.stopPropagation(), role: "dialog", 'aria-label': ok ? 'Troca validada' : 'Troca reprovada' },
+                E("div", { className: "ct-modal-ico", style: { backgroundColor: ok ? BRAND.successBg : BRAND.errorBg, color: ok ? BRAND.success : BRAND.errorText } }, ok ? '✓' : '✕'),
+                E("p", { className: "text-base font-bold mt-3", style: { color: BRAND.dark } }, ok ? 'Troca validada' : 'Troca reprovada'),
+                E("p", { className: "ct-aviso-id text-sm font-semibold mt-1", style: { color: BRAND.dark, overflowWrap: 'anywhere' } }, 'ID ' + (a.numero || '—') + ' · ' + a.titulo),
+                E("p", { className: "text-sm mt-1", style: { color: '#4E5662' } }, ok
+                    ? 'Validado por ' + (a.validador || '—') + '. ' + (a.arquivos > 1 ? 'Os ' + a.arquivos + ' templates estão' : 'O template está') + ' no cartão da troca, em “Trocas enviadas”.'
+                    : 'Reprovado por ' + (a.validador || '—') + '. Use “Corrigir” no cartão da troca para ajustar e mandar de novo.'),
+                (!ok && a.motivo) ? E("div", { className: "text-sm mt-3 text-left rounded-lg p-3", style: { backgroundColor: BRAND.errorBg, border: '1px solid ' + BRAND.errorBorder, color: BRAND.errorText, overflowWrap: 'anywhere' } }, 'Motivo: ' + a.motivo) : null,
+                mais > 0 ? E("p", { className: "ct-aviso-mais text-xs mt-3", style: { color: '#737B87' } }, mais === 1 ? 'Tem mais 1 aviso depois deste.' : 'Tem mais ' + mais + ' avisos depois deste.') : null,
+                E("button", { type: "button", onClick: fechar, className: "ct-btn-primary ct-modal-ok text-white px-5 py-2 rounded-lg text-sm font-semibold mt-4" }, 'OK')));
+    }
     function renderTrocas() {
         if (trocas.length === 0) return null;
         const E = React.createElement;
@@ -3645,7 +3671,9 @@ function SkillSwapTool() {
                 const iRej = res.findIndex((j) => j.status === 'REPROVADO');
                 if (iRej >= 0) {
                     const j = res[iRej];
-                    atualizarTroca(t.key, { status: 'reprovado', validador: j.validador || '', motivo: (t.ids.length > 1 ? 'Parte ' + (iRej + 1) + '/' + t.ids.length + ': ' : '') + (j.motivo || ''), novidade: true });
+                    const motivo = (t.ids.length > 1 ? 'Parte ' + (iRej + 1) + '/' + t.ids.length + ': ' : '') + (j.motivo || '');
+                    atualizarTroca(t.key, { status: 'reprovado', validador: j.validador || '', motivo: motivo, novidade: true });
+                    avisarDecisao(t, { tipo: 'reprovado', validador: j.validador || '', motivo: motivo });
                     tirarPendente(t.key);
                     setPendentes(lerPendentes());
                     return;
@@ -3660,6 +3688,7 @@ function SkillSwapTool() {
                 if (apr.length === t.ids.length) {
                     const quem = Array.from(new Set(apr.map((j) => j.validador || '').filter(Boolean))).join(' / ');
                     atualizarTroca(t.key, { status: 'aprovado', validador: quem, novidade: true });
+                    avisarDecisao(t, { tipo: 'aprovado', validador: quem });
                     marcarPendente(t.key, { aprovadoPor: quem || '—' });
                     setPendentes(lerPendentes());
                     return;
@@ -4121,7 +4150,8 @@ function SkillSwapTool() {
             React.createElement("footer", { className: "ct-foot" },
                 React.createElement("span", null, "Centro Tático · Automação de troca de skills"),
                 React.createElement("span", { className: "ct-foot-v" }, BUILD_VERSION))),
-        renderSplitAsk()));
+        renderSplitAsk(),
+        renderAvisoDecisao()));
 }
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(React.createElement(SkillSwapTool, null));
